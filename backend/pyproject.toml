@@ -1,0 +1,50 @@
+[project]
+name = "depo-backend"
+version = "0.1.0"
+description = "Map-integrated 3D warehouse & stock management system backend"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi~=0.118.0",
+    "uvicorn[standard]~=0.35.0",
+    "sqlalchemy~=2.0.40",
+    "geoalchemy2>=0.17,<1",
+    "alembic~=1.16.0",
+    "psycopg[binary]~=3.2",
+    "shapely~=2.1",
+    "pydantic~=2.11",
+    "pydantic-settings~=2.10",
+    "email-validator>=2.0",
+    "python-jose[cryptography]~=3.5",
+    "passlib==1.7.4",
+    "bcrypt==4.0.1",
+    "ezdxf~=1.4",
+    "apscheduler~=3.11",
+    "httpx~=0.28",
+    "python-multipart~=0.0.20",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest~=8.4",
+    "ruff~=0.12",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# B008: FastAPI Depends() in defaults is idiomatic.
+# UP046: pydantic generic models keep Generic[T] for runtime schema generation.
+ignore = ["B008", "UP046"]
+
+[tool.ruff.lint.per-file-ignores]
+# conftest must set env vars before any app import — E402 is the point.
+"tests/conftest.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
