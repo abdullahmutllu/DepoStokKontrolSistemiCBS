@@ -122,12 +122,12 @@ describe("AnalysisPanel", () => {
     server.use(
       http.get("/api/v1/regions", () =>
         HttpResponse.json([
-          { id: 5, name: "İç Anadolu", ring: RING, created_at: "2026-01-01T00:00:00Z" },
+          { id: 5, name: "Ankara Saham", ring: RING, created_at: "2026-01-01T00:00:00Z" },
         ]),
       ),
     );
     const { store } = renderWithProviders(<AnalysisPanel />);
-    await user.click(await screen.findByRole("button", { name: "İç Anadolu" }));
+    await user.click(await screen.findByRole("button", { name: "Ankara Saham" }));
     expect(store.getState().mapWorkspace.analysisRing).toEqual(RING);
     expect(await screen.findByText("İstanbul Ana Depo")).toBeInTheDocument();
   });

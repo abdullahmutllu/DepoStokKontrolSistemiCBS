@@ -54,12 +54,128 @@ PRODUCT_CATALOG = [
 ]
 
 
+# Ankara çevresi ek demo depoları — bölgesel raporlama (İç Anadolu) demoları için.
+EXTRA_WAREHOUSES = [
+    {
+        "name": "Sincan OSB Deposu",
+        "address": "Sincan OSB, Sincan/Ankara",
+        "latlng": LatLng(lat=39.9740, lng=32.5690),
+        "width": 30.0,
+        "depth": 20.0,
+        "racks": [
+            RackPlacement(col=3, row=3, w_cells=12, d_cells=2, shelf_count=3,
+                          bins_per_shelf=6, shelf_height=1.5, bin_capacity=90),
+            RackPlacement(col=3, row=12, w_cells=12, d_cells=2, shelf_count=3,
+                          bins_per_shelf=6, shelf_height=1.5, bin_capacity=90),
+        ],
+        "fill": 0.5,
+    },
+    {
+        "name": "Gölbaşı Dağıtım Merkezi",
+        "address": "Gölbaşı, Ankara",
+        "latlng": LatLng(lat=39.7900, lng=32.8080),
+        "width": 25.0,
+        "depth": 18.0,
+        "racks": [
+            RackPlacement(col=2, row=3, w_cells=14, d_cells=2, shelf_count=4,
+                          bins_per_shelf=7, shelf_height=1.4, bin_capacity=60),
+        ],
+        "fill": 0.75,
+    },
+    {
+        "name": "Kahramankazan Deposu",
+        "address": "Kahramankazan, Ankara",
+        "latlng": LatLng(lat=40.2340, lng=32.6850),
+        "width": 20.0,
+        "depth": 15.0,
+        "racks": [
+            RackPlacement(col=2, row=2, w_cells=10, d_cells=2, shelf_count=2,
+                          bins_per_shelf=5, shelf_height=1.8, bin_capacity=120),
+        ],
+        "fill": 0.3,
+    },
+    {
+        "name": "Polatlı Lojistik Deposu",
+        "address": "Polatlı, Ankara",
+        "latlng": LatLng(lat=39.5840, lng=32.1470),
+        "width": 35.0,
+        "depth": 22.0,
+        "racks": [
+            RackPlacement(col=3, row=4, w_cells=16, d_cells=2, shelf_count=3,
+                          bins_per_shelf=8, shelf_height=1.5, bin_capacity=100),
+            RackPlacement(col=3, row=14, w_cells=16, d_cells=2, shelf_count=3,
+                          bins_per_shelf=8, shelf_height=1.5, bin_capacity=100),
+        ],
+        "fill": 0.85,
+    },
+]
+
+
+def _seed_extra_warehouses(db, org_id: int, user_id: int) -> int:
+    """Adds the Ankara demo warehouses if missing (idempotent by name)."""
+    from app.models import StorageLocation
+
+    rng = random.Random(7)
+    products = list(
+        db.scalars(select(Product).where(Product.org_id == org_id).order_by(Product.id)).all()
+    )
+    created = 0
+    for wd in EXTRA_WAREHOUSES:
+        exists = db.scalar(
+            select(Warehouse).where(Warehouse.org_id == org_id, Warehouse.name == wd["name"])
+        )
+        if exists is not None:
+            continue
+        wh = Warehouse(
+            org_id=org_id,
+            name=wd["name"],
+            address=wd["address"],
+            location=geo.latlng_to_point(wd["latlng"]),
+            footprint=geo.footprint_polygon(wd["latlng"], wd["width"], wd["depth"]),
+            local_width=wd["width"],
+            local_depth=wd["depth"],
+        )
+        db.add(wh)
+        db.flush()
+        layout_builder.generate_layout(
+            db, org_id, wh.id,
+            LayoutGenerateRequest(cell_size=0.5, racks=wd["racks"], zone_label="Ana Zon"),
+        )
+        bins = list(
+            db.scalars(
+                select(StorageLocation).where(
+                    StorageLocation.warehouse_id == wh.id, StorageLocation.type == "bin"
+                )
+            ).all()
+        )
+        rng.shuffle(bins)
+        if products:
+            # Fill a share of bins with a green/amber/red spread around wd["fill"].
+            for target in bins[: max(1, int(len(bins) * wd["fill"] * 0.6))]:
+                product = rng.choice(products)
+                capacity = target.capacity or 100
+                ratio = min(1.0, max(0.1, rng.gauss(wd["fill"], 0.25)))
+                stock_service.receive(
+                    db, org_id=org_id, user_id=user_id, product_id=product.id,
+                    location_id=target.id, quantity=max(1, int(capacity * ratio)),
+                    note="Açılış stoğu",
+                )
+        created += 1
+    db.flush()
+    return created
+
+
 def seed() -> None:
     db = SessionLocal()
     try:
         existing = db.scalar(select(User).where(User.email == DEMO_EMAIL))
         if existing is not None:
-            print(f"Seed zaten mevcut ({DEMO_EMAIL}); atlanıyor.")
+            created = _seed_extra_warehouses(db, existing.org_id, existing.id)
+            db.commit()
+            if created:
+                print(f"Temel seed mevcut; {created} ek Ankara deposu eklendi.")
+            else:
+                print(f"Seed zaten mevcut ({DEMO_EMAIL}); atlanıyor.")
             return
 
         rng = random.Random(42)
@@ -220,11 +336,13 @@ def seed() -> None:
                     quantity=1, note="Konsolidasyon",
                 )
 
+        extra = _seed_extra_warehouses(db, org.id, owner.id)
+
         db.commit()
         bin_count = len(bins)
         print(
             f"Seed tamam: org='{org.name}', kullanıcılar: {DEMO_EMAIL} / staff@demo.co "
-            f"(şifre: {DEMO_PASSWORD}), {len(warehouses)} depo, {bin_count} göz, "
+            f"(şifre: {DEMO_PASSWORD}), {len(warehouses) + extra} depo, {bin_count} göz, "
             f"{len(products)} ürün."
         )
     except Exception:

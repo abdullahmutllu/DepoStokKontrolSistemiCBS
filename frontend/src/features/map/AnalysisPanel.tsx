@@ -10,6 +10,7 @@ import {
 } from "@/api/endpoints/geo";
 import { drawingsCleared, ringDrawn } from "@/features/map/mapWorkspaceSlice";
 import { formatArea, formatDistance } from "@/features/map/geometry";
+import { TURKEY_REGIONS } from "@/features/map/turkeyRegions";
 import { apiErrorMessage } from "@/lib/apiError";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -182,6 +183,25 @@ export function AnalysisPanel() {
             </div>
           </>
         ) : null}
+
+        {/* Turkey's geographic regions — one-click regional reports */}
+        <div>
+          <h3 className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-text-faint">
+            Hazır bölgeler · Türkiye
+          </h3>
+          <div className="flex flex-wrap gap-1.5">
+            {TURKEY_REGIONS.map((region) => (
+              <button
+                key={region.id}
+                onClick={() => dispatch(ringDrawn(region.ring))}
+                title={`${region.name} bölgesindeki depoları analiz et`}
+                className="rounded-full border border-ink-600 bg-ink-800 px-2.5 py-1 text-[11.5px] text-text-muted transition-colors hover:border-accent hover:text-accent"
+              >
+                {region.name}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Saved regions */}
         <div>
