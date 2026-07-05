@@ -6,14 +6,17 @@ import { OccupancyBadge } from "@/components/ui/badge";
 import { occupancyBucket, occupancyRatio } from "@/features/three/occupancy";
 import { LoadingRows } from "@/components/shared/states";
 import { DataTable, THead, Th, Tr, Td, MonoCell } from "@/components/shared/table";
+import { Button } from "@/components/ui/button";
+import { apiErrorMessage } from "@/lib/apiError";
 
 /** Regular DOM panel next to the canvas: contents of the clicked bin. */
 export function DetailPanel() {
   const dispatch = useAppDispatch();
   const selectedId = useAppSelector((s) => s.selection.selectedId);
-  const { data, isLoading } = useLocationDetailQuery(selectedId ?? 0, {
-    skip: selectedId == null,
-  });
+  const { data, isLoading, isError, error, refetch } = useLocationDetailQuery(
+    selectedId ?? 0,
+    { skip: selectedId == null },
+  );
 
   if (selectedId == null) return null;
 
@@ -32,7 +35,14 @@ export function DetailPanel() {
         </button>
       </div>
       <div className="p-3">
-        {isLoading || !data ? (
+        {isError ? (
+          <div className="space-y-2">
+            <p className="text-[12.5px] text-status-high">{apiErrorMessage(error)}</p>
+            <Button variant="secondary" size="sm" onClick={() => void refetch()}>
+              Tekrar dene
+            </Button>
+          </div>
+        ) : isLoading || !data ? (
           <LoadingRows rows={2} />
         ) : (
           <div className="space-y-2.5">

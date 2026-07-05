@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
 import { Warehouse3DTab } from "@/features/three/Warehouse3DTab";
 import { DetailPanel } from "@/features/three/DetailPanel";
 import { binSelected } from "@/features/three/selectionSlice";
 import { renderWithProviders } from "@/test/testUtils";
+import { server } from "@/test/mocks/server";
 
 describe("Warehouse3DTab", () => {
   it("renders the scene placeholder once layout data arrives", async () => {
@@ -106,5 +108,26 @@ describe("DetailPanel", () => {
     expect(screen.getByText("Rulman 6204 2RS")).toBeInTheDocument();
     expect(screen.getByText(/30 adet/)).toBeInTheDocument();
     expect(screen.getByText(/30\/100/)).toBeInTheDocument();
+  });
+
+  it("istek başarısız olursa sonsuz iskelet yerine hata + tekrar dene gösterir", async () => {
+    server.use(
+      http.get("/api/v1/locations/:id", () =>
+        HttpResponse.json(
+          { error: { code: "INTERNAL", message: "Sunucuya ulaşılamadı", details: null } },
+          { status: 500 },
+        ),
+      ),
+    );
+    const { store } = renderWithProviders(<DetailPanel />);
+    store.dispatch(binSelected(101));
+
+    expect(await screen.findByText(/Sunucuya ulaşılamadı/)).toBeInTheDocument();
+    const retry = screen.getByRole("button", { name: "Tekrar dene" });
+
+    // Sunucu düzelince "Tekrar dene" paneli doldurur.
+    server.resetHandlers();
+    retry.click();
+    expect(await screen.findByText("RLM-6204")).toBeInTheDocument();
   });
 });
