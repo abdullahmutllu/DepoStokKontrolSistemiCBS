@@ -56,6 +56,10 @@ class Bin3DOut(BaseModel):
     # Gözdeki bir ürünün org geneli stoğu eşiğin altındaysa "critical",
     # eşiğin 1.5 katının altındaysa "warning" — 3B uyarı pinleri bunu çizer.
     alert: str | None = None
+    # Pin rozetinde gösterilen bağlam: hangi ürün, kaç adet / eşik.
+    alert_sku: str | None = None
+    alert_total: int | None = None
+    alert_threshold: int | None = None
 
 
 class Layout3DOut(BaseModel):

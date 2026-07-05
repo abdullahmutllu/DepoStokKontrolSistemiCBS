@@ -84,7 +84,7 @@ def layout_3d(
     # Stock alerts: a bin inherits the worst state of the products it holds —
     # org-wide product total ≤ threshold → critical, ≤ 1.5×threshold → warning.
     holdings = db.execute(
-        select(StockItem.location_id, Product.id, Product.min_stock_threshold)
+        select(StockItem.location_id, Product.id, Product.sku, Product.min_stock_threshold)
         .join(Product, StockItem.product_id == Product.id)
         .join(StorageLocation, StockItem.location_id == StorageLocation.id)
         .where(
@@ -93,7 +93,7 @@ def layout_3d(
             Product.min_stock_threshold > 0,
         )
     ).all()
-    product_ids = {pid for _, pid, _ in holdings}
+    product_ids = {pid for _, pid, _, _ in holdings}
     org_totals = (
         {
             pid: total
@@ -106,8 +106,9 @@ def layout_3d(
         if product_ids
         else {}
     )
-    alerts: dict[int, str] = {}
-    for loc_id, pid, threshold in holdings:
+    # loc_id → (level, sku, total, threshold); critical warning'i ezer.
+    alerts: dict[int, tuple[str, str, int, int]] = {}
+    for loc_id, pid, sku, threshold in holdings:
         total = org_totals.get(pid, 0)
         if total <= threshold:
             level = "critical"
@@ -115,8 +116,9 @@ def layout_3d(
             level = "warning"
         else:
             continue
-        if alerts.get(loc_id) != "critical":
-            alerts[loc_id] = level
+        current = alerts.get(loc_id)
+        if current is None or (current[0] != "critical" and level == "critical"):
+            alerts[loc_id] = (level, sku, int(total), threshold)
 
     zones, aisles, racks, shelves, bins = [], [], [], [], []
     for loc in locations:
@@ -143,7 +145,10 @@ def layout_3d(
                     capacity=loc.capacity,
                     quantity=quantities.get(loc.id, 0),
                     movement_count=movement_counts.get(loc.id, 0),
-                    alert=alerts.get(loc.id),
+                    alert=alerts[loc.id][0] if loc.id in alerts else None,
+                    alert_sku=alerts[loc.id][1] if loc.id in alerts else None,
+                    alert_total=alerts[loc.id][2] if loc.id in alerts else None,
+                    alert_threshold=alerts[loc.id][3] if loc.id in alerts else None,
                 )
             )
 

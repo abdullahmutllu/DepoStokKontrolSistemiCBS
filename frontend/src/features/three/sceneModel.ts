@@ -24,6 +24,9 @@ export interface BinInstance {
   capacity: number | null;
   movementCount: number;
   alert: "critical" | "warning" | null;
+  alertSku: string | null;
+  alertTotal: number | null;
+  alertThreshold: number | null;
 }
 
 export interface FrameMember {
@@ -178,6 +181,9 @@ export function buildBinInstance(bin: Bin3D): BinInstance {
     capacity: bin.capacity,
     movementCount: bin.movement_count ?? 0,
     alert: bin.alert ?? null,
+    alertSku: bin.alert_sku ?? null,
+    alertTotal: bin.alert_total ?? null,
+    alertThreshold: bin.alert_threshold ?? null,
   };
 }
 
@@ -511,9 +517,11 @@ export interface AlertPin {
   /** bin id, or rack id for aggregated rack-top pins */
   refId: number;
   level: "critical" | "warning";
-  /** pin tip (cone point) position; head sphere sits above */
+  /** pin tip (cone point) position; the badge floats above */
   tip: [number, number, number];
   scale: number;
+  /** badge text, e.g. "PLT-EUR 5/20" or "2 UYARI" */
+  label: string;
 }
 
 /** One pin above every bin whose stock is below (or near) its threshold. */
@@ -525,6 +533,12 @@ export function buildBinAlertPins(bins: BinInstance[]): AlertPin[] {
       level: b.alert!,
       tip: [b.center[0], b.center[1] + b.size[1] / 2 + 0.12, b.center[2]],
       scale: 1,
+      label:
+        b.alertSku && b.alertTotal != null && b.alertThreshold != null
+          ? `${b.alertSku} · ${b.alertTotal}/${b.alertThreshold}`
+          : b.alert === "critical"
+            ? "KRİTİK STOK"
+            : "STOK UYARISI",
     }));
 }
 
@@ -536,22 +550,22 @@ export function buildRackAlertPins(bins: BinInstance[], racks: RackFrame[]): Ale
     const [cx, , cz] = rack.center;
     const [w, h, d] = rack.size;
     let worst: "critical" | "warning" | null = null;
+    let count = 0;
     for (const bin of bins) {
       if (bin.alert === null) continue;
       if (Math.abs(bin.center[0] - cx) > w / 2 + 0.05) continue;
       if (Math.abs(bin.center[2] - cz) > d / 2 + 0.05) continue;
-      if (bin.alert === "critical") {
-        worst = "critical";
-        break;
-      }
-      worst = "warning";
+      count += 1;
+      if (bin.alert === "critical") worst = "critical";
+      else if (worst === null) worst = "warning";
     }
     if (worst) {
       pins.push({
         refId: rack.id,
         level: worst,
         tip: [cx, rack.center[1] + h / 2 + 0.95, cz],
-        scale: 1.8,
+        scale: 1.6,
+        label: `${count} ${worst === "critical" ? "KRİTİK" : "UYARI"}`,
       });
     }
   }

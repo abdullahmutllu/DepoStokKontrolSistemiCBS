@@ -29,6 +29,7 @@ import {
   voronoiFC,
 } from "@/features/map/networkLayers";
 import { WarehousePopup } from "@/features/map/WarehousePopup";
+import { MapLegend } from "@/features/map/MapLegend";
 
 interface GisMapProps {
   warehouses: Warehouse[];
@@ -68,8 +69,12 @@ export function GisMap({ warehouses }: GisMapProps) {
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: buildWorkspaceStyle(),
-      center: [35.24, 39.0],
-      zoom: 5.2,
+      // Açılışta tüm Türkiye çerçevelenir (Edirne–Iğdır, Hatay–Sinop).
+      bounds: [
+        [25.5, 35.7],
+        [45.2, 42.4],
+      ],
+      fitBoundsOptions: { padding: 24 },
       attributionControl: { compact: true },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
@@ -184,11 +189,8 @@ export function GisMap({ warehouses }: GisMapProps) {
         .setLngLat([wh.location.lng, wh.location.lat])
         .addTo(map);
     });
-    if (warehouses.length > 0) {
-      const bounds = new maplibregl.LngLatBounds();
-      warehouses.forEach((wh) => bounds.extend([wh.location.lng, wh.location.lat]));
-      map.fitBounds(bounds, { padding: 100, maxZoom: 10, duration: 0 });
-    }
+    // Not: depo sınırlarına zoom YAPILMAZ — açılış çerçevesi her zaman tüm
+    // Türkiye'dir (kurucudaki bounds); kullanıcı isterse kendisi yaklaşır.
     return () => {
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
@@ -220,6 +222,7 @@ export function GisMap({ warehouses }: GisMapProps) {
   return (
     <div className="relative h-full w-full overflow-hidden bg-ink-950">
       <div ref={containerRef} data-testid="gis-map" className="h-full w-full" />
+      <MapLegend />
       {selectedWarehouse && popupAnchor && (
         <div
           className="absolute z-20"

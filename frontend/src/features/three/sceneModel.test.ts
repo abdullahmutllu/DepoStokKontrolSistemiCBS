@@ -281,21 +281,30 @@ describe("gerçekçi mod kurucuları", () => {
 describe("stok uyarı pinleri", () => {
   const bins = demoLayout.bins.map(buildBinInstance); // 101 critical, 103 warning
 
-  it("buildBinAlertPins yalnız alert'li gözlere, gözün üstüne pin koyar", () => {
+  it("buildBinAlertPins yalnız alert'li gözlere, SKU · stok/eşik rozetiyle pin koyar", () => {
     const pins = buildBinAlertPins(bins);
     expect(pins).toHaveLength(2);
     const critical = pins.find((p) => p.refId === 101)!;
     expect(critical.level).toBe("critical");
+    expect(critical.label).toBe("PLT-EUR · 5/20"); // rozet metni: ürün + sayı
     const bin = bins.find((b) => b.id === 101)!;
     expect(critical.tip[1]).toBeGreaterThan(bin.center[1] + bin.size[1] / 2);
     expect(pins.some((p) => p.refId === 102)).toBe(false); // alert'siz göz pin almaz
   });
 
-  it("buildRackAlertPins rafın en kötü durumunu büyük pin olarak yukarı asar", () => {
+  it("bağlam yoksa rozet seviye metnine düşer", () => {
+    const stripped = bins.map((b) => ({ ...b, alertSku: null }));
+    const pins = buildBinAlertPins(stripped);
+    expect(pins.find((p) => p.level === "critical")!.label).toBe("KRİTİK STOK");
+    expect(pins.find((p) => p.level === "warning")!.label).toBe("STOK UYARISI");
+  });
+
+  it("buildRackAlertPins rafın en kötü durumunu sayılı büyük pinle yukarı asar", () => {
     const model = buildSceneModel(demoLayout);
     const pins = buildRackAlertPins(bins, model.racks);
     expect(pins).toHaveLength(1);
     expect(pins[0].level).toBe("critical"); // critical, warning'i ezer
+    expect(pins[0].label).toBe("2 KRİTİK"); // raftaki alert'li göz sayısı
     expect(pins[0].scale).toBeGreaterThan(1);
     const rack = model.racks[0];
     expect(pins[0].tip[1]).toBeGreaterThan(rack.center[1] + rack.size[1] / 2);

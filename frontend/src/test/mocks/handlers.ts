@@ -52,9 +52,9 @@ export const demoLayout: Layout3D = {
     },
   ],
   bins: [
-    { id: 101, code: "Z1-A1-R1-S1-B1", pos_x: 1, pos_y: 1, pos_z: 0, dim_w: 1, dim_d: 1, dim_h: 1.5, rotation: 0, capacity: 100, quantity: 30, movement_count: 12, alert: "critical" },
+    { id: 101, code: "Z1-A1-R1-S1-B1", pos_x: 1, pos_y: 1, pos_z: 0, dim_w: 1, dim_d: 1, dim_h: 1.5, rotation: 0, capacity: 100, quantity: 30, movement_count: 12, alert: "critical", alert_sku: "PLT-EUR", alert_total: 5, alert_threshold: 20 },
     { id: 102, code: "Z1-A1-R1-S1-B2", pos_x: 2, pos_y: 1, pos_z: 0, dim_w: 1, dim_d: 1, dim_h: 1.5, rotation: 0, capacity: 100, quantity: 0, movement_count: 0, alert: null },
-    { id: 103, code: "Z1-A1-R1-S2-B1", pos_x: 1, pos_y: 1, pos_z: 1.5, dim_w: 1, dim_d: 1, dim_h: 1.5, rotation: 0, capacity: 100, quantity: 95, movement_count: 3, alert: "warning" },
+    { id: 103, code: "Z1-A1-R1-S2-B1", pos_x: 1, pos_y: 1, pos_z: 1.5, dim_w: 1, dim_d: 1, dim_h: 1.5, rotation: 0, capacity: 100, quantity: 95, movement_count: 3, alert: "warning", alert_sku: "BNT-120", alert_total: 30, alert_threshold: 25 },
   ],
 };
 

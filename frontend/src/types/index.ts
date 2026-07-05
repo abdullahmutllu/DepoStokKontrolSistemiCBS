@@ -81,6 +81,10 @@ export interface Bin3D {
   movement_count?: number;
   /** Düşük stok pini: critical (eşik altı) | warning (1.5× eşik altı). */
   alert?: "critical" | "warning" | null;
+  /** Pin rozeti bağlamı: hangi ürün, org geneli kaç adet / eşik. */
+  alert_sku?: string | null;
+  alert_total?: number | null;
+  alert_threshold?: number | null;
 }
 
 export interface Layout3D {

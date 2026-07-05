@@ -247,7 +247,12 @@ class TestGeneration:
             assert r.status_code == 200
 
         layout = client.get(f"/api/v1/warehouses/{wh.id}/layout-3d", headers=headers).json()
-        alerts = {b["id"]: b["alert"] for b in layout["bins"]}
-        assert alerts[bins[0].id] == "critical"
-        assert alerts[bins[1].id] == "warning"
-        assert alerts[bins[2].id] is None
+        by_id = {b["id"]: b for b in layout["bins"]}
+        assert by_id[bins[0].id]["alert"] == "critical"
+        assert by_id[bins[1].id]["alert"] == "warning"
+        assert by_id[bins[2].id]["alert"] is None
+        # Pin rozeti bağlamı: hangi ürün, kaç adet / eşik.
+        assert by_id[bins[0].id]["alert_sku"] == critical_p.sku
+        assert by_id[bins[0].id]["alert_total"] == 10
+        assert by_id[bins[0].id]["alert_threshold"] == 20
+        assert by_id[bins[2].id]["alert_sku"] is None

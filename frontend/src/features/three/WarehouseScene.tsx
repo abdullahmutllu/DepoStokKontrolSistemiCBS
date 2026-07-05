@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import {
+  Billboard,
   Edges,
   Environment,
   Grid,
@@ -502,6 +503,65 @@ function LedStrips({
 /* ── Stock alert pins: red/amber map pins above low-stock bins & racks ────── */
 
 const ALERT_COLORS = { critical: "#e25c4a", warning: "#e0a93e" } as const;
+const ALERT_TEXT = { critical: "#1a0d0b", warning: "#1c1508" } as const;
+
+/** One warning tag: down-pointing stem + camera-facing badge with the SKU and
+ * stock/threshold numbers (or the aggregated count on rack pins). */
+function AlertPinTag({ pin }: { pin: AlertPin }) {
+  const s = pin.scale;
+  const color = ALERT_COLORS[pin.level];
+  const fontSize = 0.15 * s;
+  // troika ölçümü asenkron; genişliği karakter sayısından kestir (mono-vari)
+  const badgeW = pin.label.length * fontSize * 0.62 + 0.34 * s;
+  const badgeH = 0.32 * s;
+  const badgeY = 0.42 * s + badgeH / 2;
+
+  return (
+    <group position={pin.tip}>
+      {/* stem: cone pointing at the bin/rack */}
+      <mesh position={[0, 0.17 * s, 0]} rotation={[Math.PI, 0, 0]}>
+        <coneGeometry args={[0.07 * s, 0.34 * s, 12]} />
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </mesh>
+      <Billboard position={[0, badgeY, 0]}>
+        {/* koyu kontur + renkli rozet gövdesi */}
+        <mesh position={[0, 0, -0.012]}>
+          <planeGeometry args={[badgeW + 0.06 * s, badgeH + 0.06 * s]} />
+          <meshBasicMaterial color="#0f1522" transparent opacity={0.9} />
+        </mesh>
+        <mesh>
+          <planeGeometry args={[badgeW, badgeH]} />
+          <meshBasicMaterial color={color} toneMapped={false} />
+        </mesh>
+        {/* ünlem madalyonu */}
+        <mesh position={[-badgeW / 2 + 0.16 * s, 0, 0.004]}>
+          <circleGeometry args={[0.1 * s, 20]} />
+          <meshBasicMaterial color={ALERT_TEXT[pin.level]} />
+        </mesh>
+        <Text
+          position={[-badgeW / 2 + 0.16 * s, 0.004, 0.008]}
+          fontSize={0.15 * s}
+          color={color}
+          anchorX="center"
+          anchorY="middle"
+          fontWeight={700}
+        >
+          !
+        </Text>
+        <Text
+          position={[0.09 * s, 0, 0.006]}
+          fontSize={fontSize}
+          color={ALERT_TEXT[pin.level]}
+          anchorX="center"
+          anchorY="middle"
+          fontWeight={700}
+        >
+          {pin.label}
+        </Text>
+      </Billboard>
+    </group>
+  );
+}
 
 /** Gentle bob so pins catch the eye; only animates while frames are already
  * being produced (interaction/convergence), so demand mode stays idle. */
@@ -515,48 +575,16 @@ function AlertPins({ bins, racks }: { bins: BinInstance[]; racks: SceneModel["ra
   useFrame(({ clock }) => {
     const g = groupRef.current;
     if (!g) return;
-    const bob = Math.sin(clock.elapsedTime * 2.2) * 0.05;
-    g.position.y = bob;
+    g.position.y = Math.sin(clock.elapsedTime * 2.2) * 0.05;
   });
 
   if (pins.length === 0) return null;
 
-  const byLevel = (level: AlertPin["level"]) => pins.filter((p) => p.level === level);
   return (
     <group ref={groupRef}>
-      {(["critical", "warning"] as const).map((level) => {
-        const levelPins = byLevel(level);
-        if (levelPins.length === 0) return null;
-        return (
-          <group key={level}>
-            {/* Heads: sphere on top of the stem */}
-            <Instances limit={Math.max(1, levelPins.length)}>
-              <sphereGeometry args={[0.16, 14, 14]} />
-              <meshBasicMaterial color={ALERT_COLORS[level]} toneMapped={false} />
-              {levelPins.map((p) => (
-                <Instance
-                  key={`${p.level}-${p.refId}`}
-                  position={[p.tip[0], p.tip[1] + 0.34 * p.scale, p.tip[2]]}
-                  scale={p.scale}
-                />
-              ))}
-            </Instances>
-            {/* Stems: cone pointing down at the bin/rack */}
-            <Instances limit={Math.max(1, levelPins.length)}>
-              <coneGeometry args={[0.09, 0.3, 10]} />
-              <meshBasicMaterial color={ALERT_COLORS[level]} toneMapped={false} />
-              {levelPins.map((p) => (
-                <Instance
-                  key={`${p.level}-${p.refId}`}
-                  position={[p.tip[0], p.tip[1] + 0.15 * p.scale, p.tip[2]]}
-                  scale={p.scale}
-                  rotation={[Math.PI, 0, 0]}
-                />
-              ))}
-            </Instances>
-          </group>
-        );
-      })}
+      {pins.map((pin) => (
+        <AlertPinTag key={`${pin.level}-${pin.refId}`} pin={pin} />
+      ))}
     </group>
   );
 }

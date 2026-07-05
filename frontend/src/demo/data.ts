@@ -309,15 +309,23 @@ export function recordMovement(
 
 /* ── alerts + layout-3d assembly ────────────────────────────────────────── */
 
-export function binAlert(locationId: number): "critical" | "warning" | null {
-  let worst: "critical" | "warning" | null = null;
+export interface BinAlertInfo {
+  level: "critical" | "warning";
+  sku: string;
+  total: number;
+  threshold: number;
+}
+
+export function binAlertInfo(locationId: number): BinAlertInfo | null {
+  let worst: BinAlertInfo | null = null;
   for (const [key, qty] of stock) {
     if (!key.endsWith(`:${locationId}`) || qty <= 0) continue;
     const p = products.find((x) => x.id === Number(key.split(":")[0]))!;
     if (p.min_stock_threshold <= 0) continue;
     const total = productTotal(p.id);
-    if (total <= p.min_stock_threshold) return "critical";
-    if (total <= p.min_stock_threshold * 1.5) worst = "warning";
+    const info = { sku: p.sku, total, threshold: p.min_stock_threshold };
+    if (total <= p.min_stock_threshold) return { level: "critical", ...info };
+    if (total <= p.min_stock_threshold * 1.5) worst = { level: "warning", ...info };
   }
   return worst;
 }
@@ -334,21 +342,27 @@ export function binMovementCount(locationId: number): number {
 export function layout3d(warehouseId: number) {
   const wh = warehouses.find((w) => w.id === warehouseId)!;
   const whLocs = locations.filter((l) => l.warehouse_id === warehouseId);
-  const bins: Bin3D[] = (binsByWarehouse.get(warehouseId) ?? []).map((b) => ({
-    id: b.id,
-    code: b.code,
-    pos_x: b.pos_x,
-    pos_y: b.pos_y,
-    pos_z: b.pos_z,
-    dim_w: b.dim_w,
-    dim_d: b.dim_d,
-    dim_h: b.dim_h,
-    rotation: b.rotation,
-    capacity: b.capacity,
-    quantity: binQuantity(b.id),
-    movement_count: binMovementCount(b.id),
-    alert: binAlert(b.id),
-  }));
+  const bins: Bin3D[] = (binsByWarehouse.get(warehouseId) ?? []).map((b) => {
+    const alert = binAlertInfo(b.id);
+    return {
+      id: b.id,
+      code: b.code,
+      pos_x: b.pos_x,
+      pos_y: b.pos_y,
+      pos_z: b.pos_z,
+      dim_w: b.dim_w,
+      dim_d: b.dim_d,
+      dim_h: b.dim_h,
+      rotation: b.rotation,
+      capacity: b.capacity,
+      quantity: binQuantity(b.id),
+      movement_count: binMovementCount(b.id),
+      alert: alert?.level ?? null,
+      alert_sku: alert?.sku ?? null,
+      alert_total: alert?.total ?? null,
+      alert_threshold: alert?.threshold ?? null,
+    };
+  });
   return {
     warehouse_id: warehouseId,
     local_width: wh.local_width,
