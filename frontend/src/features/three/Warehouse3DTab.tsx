@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, X } from "lucide-react";
+import { Footprints, Search, Sparkles, X } from "lucide-react";
 import { useLayout3dQuery } from "@/api/endpoints/warehouses";
 import { useLazyFindProductQuery } from "@/api/endpoints/stock";
+import { useProductsQuery } from "@/api/endpoints/products";
+import { useSlottingMutation } from "@/api/endpoints/ai";
 import { useAppDispatch, useAppSelector } from "@/app/hooks";
-import { binsHighlighted, highlightsCleared } from "@/features/three/selectionSlice";
+import { binSelected, binsHighlighted, highlightsCleared } from "@/features/three/selectionSlice";
 import { buildSceneModel, cameraPresets, type CameraPreset } from "@/features/three/sceneModel";
 import {
   WarehouseScene,
@@ -20,8 +22,9 @@ import {
 } from "@/features/three/occupancy";
 import type { PickRoute, PolicyRoute } from "@/types";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/shared/states";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import type { SlottingSuggestion } from "@/types";
 import { apiErrorMessage } from "@/lib/apiError";
 import { toast } from "sonner";
 
@@ -36,6 +39,29 @@ export function Warehouse3DTab({ warehouseId }: { warehouseId: number }) {
   const [colorMode, setColorMode] = useState<ColorMode>("occupancy");
   const [pickRoute, setPickRoute] = useState<PickRoute | null>(null);
   const [policy, setPolicy] = useState<PolicyRoute["policy"]>("optimized");
+  const [walkMode, setWalkMode] = useState(false);
+  const [walkLocked, setWalkLocked] = useState(false);
+  const [slotProductId, setSlotProductId] = useState<number | null>(null);
+  const [suggestions, setSuggestions] = useState<SlottingSuggestion[]>([]);
+  const products = useProductsQuery({ page_size: 100 });
+  const [runSlotting, slottingState] = useSlottingMutation();
+
+  const suggest = async () => {
+    const pid = slotProductId ?? products.data?.items[0]?.id;
+    if (pid == null) return;
+    try {
+      const result = await runSlotting({ product_id: pid, warehouse_id: warehouseId }).unwrap();
+      setSuggestions(result.suggestions);
+      dispatch(binsHighlighted(result.suggestions.map((s) => s.location_id)));
+      if (result.suggestions[0]) {
+        toast.success(`Öneri: ${result.suggestions[0].code} — ${result.suggestions[0].reason}`);
+      } else {
+        toast.info("Uygun boş göz bulunamadı.");
+      }
+    } catch (err) {
+      toast.error(apiErrorMessage(err as Parameters<typeof apiErrorMessage>[0]));
+    }
+  };
 
   const model = useMemo(() => (data ? buildSceneModel(data) : null), [data]);
   const presets = useMemo(() => (model ? cameraPresets(model.floor) : []), [model]);
@@ -105,6 +131,60 @@ export function Warehouse3DTab({ warehouseId }: { warehouseId: number }) {
         onPolicyChange={setPolicy}
       />
 
+      {/* AI yerleştirme önerisi: boş gözler sahnede parlar */}
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-ink-600 bg-ink-850 px-3 py-2">
+        <span className="flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wide text-text-muted">
+          <Sparkles size={13} /> Yerleştirme önerisi
+        </span>
+        <Select
+          value={slotProductId ?? products.data?.items[0]?.id ?? ""}
+          onChange={(e) => setSlotProductId(Number(e.target.value))}
+          aria-label="Yerleştirilecek ürün"
+          className="w-56"
+        >
+          {(products.data?.items ?? []).map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.sku} — {p.name}
+            </option>
+          ))}
+        </Select>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void suggest()}
+          disabled={slottingState.isLoading}
+        >
+          {slottingState.isLoading ? "Değerlendiriliyor…" : "Göz öner"}
+        </Button>
+        {suggestions.map((s, i) => (
+          <button
+            key={s.location_id}
+            onClick={() => dispatch(binSelected(s.location_id))}
+            title={s.reason}
+            className={`mono rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+              i === 0
+                ? "border-status-low bg-status-low/15 text-status-low"
+                : "border-ink-600 bg-ink-800 text-text-muted hover:border-accent/60"
+            }`}
+          >
+            {i === 0 ? "★ " : ""}
+            {s.code}
+          </button>
+        ))}
+        {suggestions.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSuggestions([]);
+              dispatch(highlightsCleared());
+            }}
+          >
+            <X size={12} />
+          </Button>
+        )}
+      </div>
+
       {/* The scene */}
       <div className="relative h-[520px] overflow-hidden rounded-md border border-ink-600 bg-ink-950">
         <WarehouseScene
@@ -114,7 +194,28 @@ export function Warehouse3DTab({ warehouseId }: { warehouseId: number }) {
           viewMode={viewMode}
           colorMode={colorMode}
           route={pickRoute?.routes.find((r) => r.policy === policy) ?? null}
+          walkMode={walkMode}
+          onWalkExit={() => {
+            setWalkMode(false);
+            setWalkLocked(false);
+          }}
+          onWalkLock={() => setWalkLocked(true)}
         />
+        {/* Yürüyüş modu: pointer lock kullanıcı tıklaması ister */}
+        {walkMode && !walkLocked && (
+          <button
+            id="walk-start"
+            className="absolute inset-0 z-20 grid place-items-center bg-ink-950/70 backdrop-blur-[2px]"
+          >
+            <span className="rounded-md border border-ink-600 bg-ink-900 px-4 py-3 text-center text-[13px] text-text">
+              <Footprints className="mx-auto mb-1.5 text-accent" size={20} />
+              <span className="font-medium">Yürüyüş moduna girmek için tıklayın</span>
+              <span className="mt-1 block text-[11.5px] text-text-muted">
+                WASD / ok tuşları: hareket · Shift: koşu · fare: bakış · ESC: çıkış
+              </span>
+            </span>
+          </button>
+        )}
         <DetailPanel />
         {/* Camera presets + view mode */}
         <div className="absolute left-3 top-3 flex items-center gap-2">
@@ -157,6 +258,15 @@ export function Warehouse3DTab({ warehouseId }: { warehouseId: number }) {
               </button>
             ))}
           </div>
+          <button
+            onClick={() => setWalkMode((v) => !v)}
+            aria-pressed={walkMode}
+            className={`flex items-center gap-1 rounded border border-ink-600 bg-ink-900/90 px-2 py-1 text-[11.5px] font-medium backdrop-blur transition-colors ${
+              walkMode ? "text-accent" : "text-text-muted hover:text-text"
+            }`}
+          >
+            <Footprints size={12} /> Yürüyüş
+          </button>
         </div>
         {/* Legend — the color scale is data, keep it visible */}
         <div className="absolute bottom-3 left-3 flex items-center gap-3 rounded border border-ink-600 bg-ink-900/90 px-2.5 py-1.5 backdrop-blur">

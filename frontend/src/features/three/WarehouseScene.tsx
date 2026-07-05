@@ -9,6 +9,7 @@ import {
   Instances,
   Line,
   OrbitControls,
+  PointerLockControls,
   Text,
   useGLTF,
 } from "@react-three/drei";
@@ -34,6 +35,7 @@ import {
   HIGHLIGHT_COLOR,
   OCCUPANCY_COLORS,
 } from "@/features/three/occupancy";
+import { heatColor, heatGrid, pathLength, pathPoseAt } from "@/features/three/floorHeatmap";
 import type { PolicyRoute } from "@/types";
 
 export type ViewMode = "analytic" | "realistic";
@@ -589,6 +591,148 @@ function AlertPins({ bins, racks }: { bins: BinInstance[]; racks: SceneModel["ra
   );
 }
 
+/* ── Zemin ısı haritası: hareket yoğunluğu overlay'i (Hareket modu) ───────── */
+
+function FloorHeatOverlay({ bins, floor }: { bins: BinInstance[]; floor: SceneModel["floor"] }) {
+  const texture = useMemo(() => {
+    const grid = heatGrid(bins, floor.width, floor.depth);
+    const h = grid.length;
+    const w = grid[0]?.length ?? 1;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    const image = ctx.createImageData(w, h);
+    for (let z = 0; z < h; z++) {
+      for (let x = 0; x < w; x++) {
+        const t = grid[z][x];
+        const [r, g, b] = heatColor(t);
+        const i = (z * w + x) * 4;
+        image.data[i] = r;
+        image.data[i + 1] = g;
+        image.data[i + 2] = b;
+        image.data[i + 3] = Math.round(Math.min(1, t * 1.6) * 200); // soğuk alan şeffaf
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.magFilter = THREE.LinearFilter;
+    return tex;
+  }, [bins, floor.width, floor.depth]);
+
+  if (!texture) return null;
+  return (
+    <mesh
+      position={[floor.width / 2, 0.025, floor.depth / 2]}
+      rotation={[-Math.PI / 2, 0, 0]}
+    >
+      <planeGeometry args={[floor.width, floor.depth]} />
+      <meshBasicMaterial map={texture} transparent depthWrite={false} />
+    </mesh>
+  );
+}
+
+/* ── Rota süren forklift: toplama rotasını döngüde sürer ──────────────────── */
+
+const FORKLIFT_SPEED = 2.1; // m/sn (sim)
+
+function RouteForklift({ path }: { path: { x: number; y: number }[] }) {
+  const gltf = useGLTF(asset("/models/forklift.glb"));
+  const groupRef = useRef<THREE.Group>(null);
+  const distRef = useRef(0);
+  const { invalidate } = useThree();
+  const total = useMemo(() => pathLength(path), [path]);
+  const scene = useMemo(() => gltf.scene.clone(true), [gltf]);
+  const fitted = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const scale = 1.7 / Math.max(1e-4, Math.max(size.x, size.z));
+    return { scale, liftY: -box.min.y * scale };
+  }, [gltf]);
+
+  useFrame((_, delta) => {
+    if (total <= 0 || !groupRef.current) return;
+    distRef.current = (distRef.current + FORKLIFT_SPEED * delta) % total;
+    const pose = pathPoseAt(path, distRef.current);
+    groupRef.current.position.set(pose.position[0], 0, pose.position[2]);
+    groupRef.current.rotation.y = pose.rotationY;
+    invalidate(); // rota gösterilirken sahne canlı akar
+  });
+
+  if (path.length < 2) return null;
+  return (
+    <group ref={groupRef}>
+      <primitive object={scene} position={[0, fitted.liftY, 0]} scale={fitted.scale} />
+    </group>
+  );
+}
+
+/* ── Birinci şahıs yürüyüş modu (WASD + fare) ─────────────────────────────── */
+
+function WalkController({
+  floor,
+  onExit,
+  onLock,
+}: {
+  floor: SceneModel["floor"];
+  onExit: () => void;
+  onLock?: () => void;
+}) {
+  const { camera, invalidate } = useThree();
+  const keys = useRef(new Set<string>());
+
+  useEffect(() => {
+    camera.position.set(floor.width / 2, 1.7, 2.5);
+    camera.lookAt(floor.width / 2, 1.5, floor.depth / 2);
+    invalidate();
+    const down = (e: KeyboardEvent) => {
+      keys.current.add(e.code);
+      invalidate();
+    };
+    const up = (e: KeyboardEvent) => keys.current.delete(e.code);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, [camera, floor, invalidate]);
+
+  useFrame((state, delta) => {
+    const k = keys.current;
+    if (k.size === 0) return;
+    const speed = k.has("ShiftLeft") || k.has("ShiftRight") ? 7 : 3.4;
+    const forward = new THREE.Vector3();
+    state.camera.getWorldDirection(forward);
+    forward.y = 0;
+    forward.normalize();
+    const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
+    const move = new THREE.Vector3();
+    if (k.has("KeyW") || k.has("ArrowUp")) move.add(forward);
+    if (k.has("KeyS") || k.has("ArrowDown")) move.sub(forward);
+    if (k.has("KeyD") || k.has("ArrowRight")) move.add(right);
+    if (k.has("KeyA") || k.has("ArrowLeft")) move.sub(right);
+    if (move.lengthSq() === 0) return;
+    move.normalize().multiplyScalar(speed * delta);
+    state.camera.position.add(move);
+    state.camera.position.x = Math.min(floor.width - 0.6, Math.max(0.6, state.camera.position.x));
+    state.camera.position.z = Math.min(floor.depth - 0.6, Math.max(0.6, state.camera.position.z));
+    state.camera.position.y = 1.7; // göz hizası sabit
+    invalidate();
+  });
+
+  return (
+    <PointerLockControls
+      selector="#walk-start"
+      onLock={onLock}
+      onUnlock={onExit}
+      onChange={() => invalidate()}
+    />
+  );
+}
+
 /* ── Pick route: animated dashed line + numbered stop markers ─────────────── */
 
 function RouteOverlay({ route }: { route: PolicyRoute | null }) {
@@ -621,6 +765,9 @@ function RouteOverlay({ route }: { route: PolicyRoute | null }) {
   if (!route || points.length < 2) return null;
   return (
     <group>
+      <Suspense fallback={null}>
+        <RouteForklift path={route.path} />
+      </Suspense>
       <Line
         points={points}
         color="#9dc1ff"
@@ -774,6 +921,9 @@ export function WarehouseScene({
   viewMode = "analytic",
   colorMode = "occupancy",
   route = null,
+  walkMode = false,
+  onWalkExit,
+  onWalkLock,
 }: {
   model: SceneModel;
   presetRequest: CameraPreset | null;
@@ -781,6 +931,9 @@ export function WarehouseScene({
   viewMode?: ViewMode;
   colorMode?: ColorMode;
   route?: PolicyRoute | null;
+  walkMode?: boolean;
+  onWalkExit?: () => void;
+  onWalkLock?: () => void;
 }) {
   const dispatch = useAppDispatch();
   const { width, depth } = model.floor;
@@ -831,6 +984,7 @@ export function WarehouseScene({
       <RackSigns signs={model.signs} />
       <AlertPins bins={model.bins} racks={model.racks} />
       <RouteOverlay route={route} />
+      {colorMode === "movement" && <FloorHeatOverlay bins={model.bins} floor={model.floor} />}
 
       {realistic && (
         <Suspense fallback={null}>
@@ -853,19 +1007,29 @@ export function WarehouseScene({
         </>
       )}
 
-      <CameraRig request={presetRequest} onArrived={onPresetArrived} />
-      <OrbitControls
-        target={[width / 2, 0.8, depth / 2]}
-        enableDamping
-        dampingFactor={0.08}
-        rotateSpeed={0.6}
-        zoomSpeed={0.8}
-        panSpeed={0.7}
-        maxPolarAngle={Math.PI / 2.05}
-        minDistance={3}
-        maxDistance={camDist * 2.5}
-        makeDefault
-      />
+      {walkMode ? (
+        <WalkController
+          floor={model.floor}
+          onExit={() => onWalkExit?.()}
+          onLock={onWalkLock}
+        />
+      ) : (
+        <>
+          <CameraRig request={presetRequest} onArrived={onPresetArrived} />
+          <OrbitControls
+            target={[width / 2, 0.8, depth / 2]}
+            enableDamping
+            dampingFactor={0.08}
+            rotateSpeed={0.6}
+            zoomSpeed={0.8}
+            panSpeed={0.7}
+            maxPolarAngle={Math.PI / 2.05}
+            minDistance={3}
+            maxDistance={camDist * 2.5}
+            makeDefault
+          />
+        </>
+      )}
     </Canvas>
   );
 }

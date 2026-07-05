@@ -73,6 +73,47 @@ describe("Warehouse3DTab", () => {
     expect(realistic).toHaveAttribute("aria-checked", "true");
   });
 
+  it("yürüyüş modu: düğme → kilit overlay'i görünür", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Warehouse3DTab warehouseId={3} />);
+    await screen.findByTestId("r3f-canvas");
+
+    await user.click(screen.getByRole("button", { name: /Yürüyüş/ }));
+    expect(await screen.findByText(/Yürüyüş moduna girmek için tıklayın/)).toBeInTheDocument();
+    expect(screen.getByText(/WASD/)).toBeInTheDocument();
+  });
+
+  it("yerleştirme önerisi: gözler vurgulanır ve çipler gelir", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post("/api/v1/ai/slotting", () =>
+        HttpResponse.json({
+          ai_available: true,
+          suggestions: [
+            { location_id: 102, code: "Z1-A1-R1-S1-B2", score: 0.9, reason: "Kapıya en yakın boş göz" },
+          ],
+          explanation: "Kural tabanlı",
+        }),
+      ),
+      http.get("/api/v1/products", () =>
+        HttpResponse.json({
+          items: [
+            { id: 7, sku: "RLM-6204", name: "Rulman", description: null, unit: "adet", barcode: null, dim_w: null, dim_d: null, dim_h: null, min_stock_threshold: 0, image_url: null, created_at: "2026-01-01T00:00:00Z" },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 100,
+        }),
+      ),
+    );
+    const { store } = renderWithProviders(<Warehouse3DTab warehouseId={3} />);
+    await screen.findByTestId("r3f-canvas");
+
+    await user.click(await screen.findByRole("button", { name: "Göz öner" }));
+    expect(await screen.findByRole("button", { name: /Z1-A1-R1-S1-B2/ })).toBeInTheDocument();
+    expect(store.getState().selection.highlightedIds).toEqual([102]);
+  });
+
   it("toplama rotası: rastgele gözler → 3 politika çipi + kazanan + kapat", async () => {
     const user = userEvent.setup();
     renderWithProviders(<Warehouse3DTab warehouseId={3} />);

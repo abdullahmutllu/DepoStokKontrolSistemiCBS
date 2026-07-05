@@ -297,6 +297,12 @@ export const handlers = [
   http.get("/api/v1/reports/kpi", () => HttpResponse.json(demoKpi)),
   http.get("/api/v1/reports/reorder-suggestions", () => HttpResponse.json([])),
   http.get("/api/v1/orders", () => HttpResponse.json([])),
+  http.get("/api/v1/products", () =>
+    HttpResponse.json({ items: [], total: 0, page: 1, page_size: 100 }),
+  ),
+  http.post("/api/v1/ai/slotting", () =>
+    HttpResponse.json({ ai_available: true, suggestions: [], explanation: "" }),
+  ),
 
   http.post("/api/v1/auth/login", async ({ request }) => {
     const body = (await request.json()) as { email: string; password: string };

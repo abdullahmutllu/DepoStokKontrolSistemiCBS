@@ -185,6 +185,7 @@ vi.mock("@react-three/drei", () => ({
   Environment: () => null,
   Line: () => null,
   Billboard: () => null,
+  PointerLockControls: () => null,
   useGLTF: Object.assign(() => ({ scene: {}, nodes: {}, materials: {} }), {
     preload: () => {},
   }),
