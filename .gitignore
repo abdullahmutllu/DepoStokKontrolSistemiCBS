@@ -22,3 +22,6 @@ coverage/
 Thumbs.db
 .DS_Store
 .playwright-mcp/
+
+# oturum içi geçici ekran görüntüleri
+/*.png
