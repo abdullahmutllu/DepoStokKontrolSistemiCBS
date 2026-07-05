@@ -38,6 +38,9 @@ import type { PolicyRoute } from "@/types";
 export type ViewMode = "analytic" | "realistic";
 export type ColorMode = "occupancy" | "movement";
 
+/** public/ asset path that survives subpath deploys (GitHub Pages demo). */
+const asset = (p: string) => `${import.meta.env.BASE_URL.replace(/\/$/, "")}${p}`;
+
 /** Data color of a bin under the active color mode. */
 function dataColor(bin: BinInstance, colorMode: ColorMode, maxMove: number): string {
   if (colorMode === "movement") return ABC_COLORS[abcBucket(bin.movementCount, maxMove)];
@@ -432,9 +435,9 @@ function fitInstance(
 }
 
 function PalletLayer({ bins }: { bins: BinInstance[] }) {
-  const pallet = useFittedGltf("/models/pallet.glb");
-  const boxSingle = useFittedGltf("/models/box_single.glb");
-  const boxStack = useFittedGltf("/models/box_stack.glb");
+  const pallet = useFittedGltf(asset("/models/pallet.glb"));
+  const boxSingle = useFittedGltf(asset("/models/box_single.glb"));
+  const boxStack = useFittedGltf(asset("/models/box_stack.glb"));
   const placements = useMemo(() => buildPalletPlacements(bins), [bins]);
   const singles = placements.filter((p) => p.boxKind === "single");
   const stacks = placements.filter((p) => p.boxKind === "stack");
@@ -633,7 +636,7 @@ function RouteOverlay({ route }: { route: PolicyRoute | null }) {
 }
 
 function Forklifts({ props: placements }: { props: SceneModel["props"] }) {
-  const gltf = useGLTF("/models/forklift.glb");
+  const gltf = useGLTF(asset("/models/forklift.glb"));
   const fitted = useMemo(() => {
     const box = new THREE.Box3().setFromObject(gltf.scene);
     const size = new THREE.Vector3();
@@ -786,7 +789,7 @@ export function WarehouseScene({
       {/* Self-hosted HDRI — `files`, never `preset` (preset fetches a CDN). */}
       <Suspense fallback={null}>
         <Environment
-          files="/hdri/empty_warehouse_01_1k.hdr"
+          files={asset("/hdri/empty_warehouse_01_1k.hdr")}
           environmentIntensity={realistic ? 0.6 : 0.3}
         />
       </Suspense>

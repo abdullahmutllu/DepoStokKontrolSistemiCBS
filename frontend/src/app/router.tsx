@@ -13,6 +13,9 @@ import { MovementsPage } from "@/features/stock/MovementsPage";
 import { ReportsPage } from "@/features/reports/ReportsPage";
 import { AskPage } from "@/features/ai/AskPage";
 
+// Subpath deploys (GitHub Pages demo) need the Vite base as router basename.
+const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
+
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
   { path: "/register", element: <RegisterPage /> },
@@ -36,4 +39,4 @@ export const router = createBrowserRouter([
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
-]);
+], { basename });
