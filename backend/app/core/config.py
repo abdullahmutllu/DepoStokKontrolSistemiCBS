@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_model: str = "deepseek/deepseek-chat-v3-0324"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+
+    # openrouteservice — optional drive-time isochrones (free key: account.heigit.org,
+    # ~500 isochrones/day). Empty → coverage falls back to crow-flies rings.
+    ors_api_key: str = ""
+    ors_base_url: str = "https://api.openrouteservice.org"
     ai_max_tokens: int = 800
     ai_daily_limit: int = 50
     ai_timeout_seconds: float = 30.0

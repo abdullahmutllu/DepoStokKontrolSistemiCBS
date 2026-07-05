@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
-import type { LatLng } from "@/types";
+import type { CenterOfGravity, LatLng } from "@/types";
 
 export type MapTool =
   | "pan"
@@ -14,6 +14,17 @@ export interface MeasureReadout {
   value: number; // meters or m²
 }
 
+export type PanelTab = "region" | "network";
+
+export interface NetworkLayerToggles {
+  customers: boolean;
+  heatmap: boolean;
+  assignments: boolean;
+  voronoi: boolean;
+  coverage: boolean;
+  flow: boolean;
+}
+
 interface MapWorkspaceState {
   activeTool: MapTool;
   basemapId: string;
@@ -21,6 +32,10 @@ interface MapWorkspaceState {
   measure: MeasureReadout | null;
   /** Last finished polygon/rectangle/circle ring — drives the analysis panel. */
   analysisRing: LatLng[] | null;
+  panelTab: PanelTab;
+  networkLayers: NetworkLayerToggles;
+  /** Latest greenfield result — rendered on the map as proposed sites + lines. */
+  cogResult: CenterOfGravity | null;
 }
 
 const initialState: MapWorkspaceState = {
@@ -29,6 +44,16 @@ const initialState: MapWorkspaceState = {
   selectedWarehouseId: null,
   measure: null,
   analysisRing: null,
+  panelTab: "region",
+  networkLayers: {
+    customers: true,
+    heatmap: false,
+    assignments: false,
+    voronoi: false,
+    coverage: false,
+    flow: false,
+  },
+  cogResult: null,
 };
 
 const mapWorkspaceSlice = createSlice({
@@ -56,6 +81,15 @@ const mapWorkspaceSlice = createSlice({
       state.analysisRing = null;
       state.measure = null;
     },
+    panelTabChanged(state, action: PayloadAction<PanelTab>) {
+      state.panelTab = action.payload;
+    },
+    networkLayerToggled(state, action: PayloadAction<keyof NetworkLayerToggles>) {
+      state.networkLayers[action.payload] = !state.networkLayers[action.payload];
+    },
+    cogComputed(state, action: PayloadAction<CenterOfGravity | null>) {
+      state.cogResult = action.payload;
+    },
   },
 });
 
@@ -66,5 +100,8 @@ export const {
   measureUpdated,
   ringDrawn,
   drawingsCleared,
+  panelTabChanged,
+  networkLayerToggled,
+  cogComputed,
 } = mapWorkspaceSlice.actions;
 export default mapWorkspaceSlice.reducer;

@@ -46,6 +46,8 @@ export const baseApi = createApi({
     "Report",
     "Notification",
     "Region",
+    "Customer",
+    "Network",
   ],
   endpoints: () => ({}),
 });

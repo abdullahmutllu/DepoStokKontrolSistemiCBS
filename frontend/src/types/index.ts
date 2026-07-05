@@ -77,6 +77,10 @@ export interface Bin3D {
   rotation: number;
   capacity: number | null;
   quantity: number;
+  /** Son 30 gündeki giriş+çıkış hareket sayısı (ABC/hareket ısı modu). */
+  movement_count?: number;
+  /** Düşük stok pini: critical (eşik altı) | warning (1.5× eşik altı). */
+  alert?: "critical" | "warning" | null;
 }
 
 export interface Layout3D {
@@ -326,6 +330,117 @@ export interface RegionAnalysis {
   low_stock_product_count: number;
   max_pairwise_distance_m: number;
   warehouses: RegionWarehouseRow[];
+}
+
+export interface Customer {
+  id: number;
+  name: string;
+  location: LatLng;
+  weight: number;
+  city: string | null;
+  created_at: string;
+}
+
+export interface DemandPoint {
+  id: number;
+  name: string;
+  location: LatLng;
+  weight: number;
+}
+
+export interface ProposedSite {
+  location: LatLng;
+  assigned_customers: number;
+  assigned_weight: number;
+}
+
+export interface AssignmentLine {
+  customer_id: number;
+  from_location: LatLng;
+  to_location: LatLng;
+  weight: number;
+  distance_m: number;
+}
+
+export interface CenterOfGravity {
+  n_sites: number;
+  proposed_sites: ProposedSite[];
+  assignments: AssignmentLine[];
+  current_total_weighted_km: number;
+  proposed_total_weighted_km: number;
+  improvement_percent: number;
+}
+
+export interface FacilityLoad {
+  warehouse_id: number;
+  warehouse_name: string;
+  location: LatLng;
+  customer_count: number;
+  total_weight: number;
+  avg_distance_km: number;
+}
+
+export interface ClosestFacility {
+  assignments: AssignmentLine[];
+  loads: FacilityLoad[];
+  territories: { warehouse_id: number; ring: LatLng[] }[];
+}
+
+export interface CoverageBand {
+  radius_km: number;
+  ring: LatLng[];
+  customer_count: number;
+  covered_weight: number;
+}
+
+export interface WarehouseCoverage {
+  warehouse_id: number;
+  warehouse_name: string;
+  bands: CoverageBand[];
+  isochrones: { minutes: number; geometry: GeoJSON.Geometry }[] | null;
+}
+
+export interface Coverage {
+  mode: "rings" | "isochrone";
+  note: string;
+  warehouses: WarehouseCoverage[];
+  uncovered_customers: number;
+  uncovered_weight: number;
+}
+
+export interface FlowArc {
+  from_warehouse_id: number;
+  from_name: string;
+  from_location: LatLng;
+  to_warehouse_id: number;
+  to_name: string;
+  to_location: LatLng;
+  total_quantity: number;
+  transfer_count: number;
+}
+
+export interface PickStop {
+  order: number;
+  location_id: number;
+  code: string;
+  x: number;
+  y: number;
+  product_sku: string | null;
+  quantity: number | null;
+}
+
+export interface PolicyRoute {
+  policy: "s_shape" | "largest_gap" | "optimized";
+  total_m: number;
+  stops: PickStop[];
+  path: { x: number; y: number }[];
+}
+
+export interface PickRoute {
+  warehouse_id: number;
+  pick_count: number;
+  routes: PolicyRoute[];
+  best_policy: string;
 }
 
 export interface ApiError {

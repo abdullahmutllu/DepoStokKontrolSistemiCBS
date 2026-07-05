@@ -46,6 +46,54 @@ describe("Warehouse3DTab", () => {
     await waitFor(() => expect(store.getState().selection.highlightedIds).toEqual([]));
     expect(await screen.findByText("Ürün stokta bulunamadı.")).toBeInTheDocument();
   });
+
+  it("renk modu anahtarı lejantı ABC sınıflarına çevirir", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Warehouse3DTab warehouseId={3} />);
+    await screen.findByTestId("r3f-canvas");
+
+    await user.click(screen.getByRole("radio", { name: "Hareket (ABC)" }));
+    expect(screen.getByText("A · yoğun")).toBeInTheDocument();
+    expect(screen.getByText("Hareketsiz")).toBeInTheDocument();
+    expect(screen.queryByText("%60 altı")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "Doluluk" }));
+    expect(screen.getByText("%60 altı")).toBeInTheDocument();
+  });
+
+  it("görünüm modu anahtarı Gerçekçi moda geçer", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Warehouse3DTab warehouseId={3} />);
+    await screen.findByTestId("r3f-canvas");
+
+    const realistic = screen.getByRole("radio", { name: "Gerçekçi" });
+    await user.click(realistic);
+    expect(realistic).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("toplama rotası: rastgele gözler → 3 politika çipi + kazanan + kapat", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Warehouse3DTab warehouseId={3} />);
+    await screen.findByTestId("r3f-canvas");
+
+    await user.click(screen.getByRole("button", { name: /Rastgele 8 göz/ }));
+
+    // Üç politika çipi metre değerleriyle gelir; en iyi ★ ile işaretlenir.
+    const optimize = await screen.findByRole("button", { name: /Optimize · 31,5 m/ });
+    expect(optimize).toHaveTextContent("★");
+    expect(optimize).toHaveAttribute("aria-pressed", "true"); // kazanan otomatik seçilir
+    expect(screen.getByRole("button", { name: /S-shape · 42,5 m/ })).toBeInTheDocument();
+    const lg = screen.getByRole("button", { name: /Largest-gap · 38 m/ });
+    expect(lg).toHaveTextContent("−%11"); // s-shape'e göre kazanç
+    expect(screen.getByText(/Ratliff–Rosenthal \(1983\)/)).toBeInTheDocument();
+
+    // Politika değiştirilebilir.
+    await user.click(lg);
+    expect(lg).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: /Kapat/ }));
+    expect(screen.getByRole("button", { name: /Rastgele 8 göz/ })).toBeInTheDocument();
+  });
 });
 
 describe("DetailPanel", () => {

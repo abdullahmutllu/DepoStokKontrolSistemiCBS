@@ -32,6 +32,7 @@ vi.mock("maplibre-gl", () => {
   class MockMap {
     handlers: Record<string, ((e: unknown) => void)[]> = {};
     layoutProps: Record<string, string> = {};
+    sources: Record<string, { type: string; data: unknown }> = {};
     constructor() {
       (window as unknown as Record<string, unknown>).__mockMap = this;
       // GisMap waits for "load" before wiring the draw controller.
@@ -61,6 +62,22 @@ vi.mock("maplibre-gl", () => {
     }
     setLayoutProperty(id: string, _prop: string, value: string) {
       this.layoutProps[id] = value;
+    }
+    addSource(id: string, def: { type: string; data: unknown }) {
+      this.sources[id] = def;
+    }
+    getSource(id: string) {
+      const src = this.sources[id];
+      if (!src) return undefined;
+      return {
+        setData: (d: unknown) => {
+          src.data = d;
+        },
+      };
+    }
+    addLayer() {}
+    getStyle() {
+      return { layers: [{ id: "osm" }, { id: "td-polygon" }] };
     }
     project() {
       return { x: 120, y: 160 };
@@ -165,6 +182,18 @@ vi.mock("@react-three/drei", () => ({
   Text: () => null,
   Edges: () => null,
   Grid: () => null,
+  Environment: () => null,
+  Line: () => null,
+  useGLTF: Object.assign(() => ({ scene: {}, nodes: {}, materials: {} }), {
+    preload: () => {},
+  }),
+}));
+
+vi.mock("@react-three/postprocessing", () => ({
+  EffectComposer: () => null,
+  N8AO: () => null,
+  Bloom: () => null,
+  SMAA: () => null,
 }));
 
 // ── MSW ─────────────────────────────────────────────────────────────────────

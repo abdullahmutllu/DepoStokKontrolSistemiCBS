@@ -8,9 +8,15 @@ import {
   useRegionAnalysisMutation,
   useRegionsQuery,
 } from "@/api/endpoints/geo";
-import { drawingsCleared, ringDrawn } from "@/features/map/mapWorkspaceSlice";
+import {
+  drawingsCleared,
+  panelTabChanged,
+  ringDrawn,
+} from "@/features/map/mapWorkspaceSlice";
 import { formatArea, formatDistance } from "@/features/map/geometry";
 import { TURKEY_REGIONS } from "@/features/map/turkeyRegions";
+import { NetworkPanel } from "@/features/map/NetworkPanel";
+import { cn } from "@/lib/utils";
 import { apiErrorMessage } from "@/lib/apiError";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +27,7 @@ import { Link } from "react-router-dom";
 export function AnalysisPanel() {
   const dispatch = useAppDispatch();
   const analysisRing = useAppSelector((s) => s.mapWorkspace.analysisRing);
+  const panelTab = useAppSelector((s) => s.mapWorkspace.panelTab);
   const [analyze, analysis] = useRegionAnalysisMutation();
   const regions = useRegionsQuery();
   const [createRegion, createState] = useCreateRegionMutation();
@@ -52,12 +59,35 @@ export function AnalysisPanel() {
 
   return (
     <aside className="flex h-full w-96 shrink-0 flex-col overflow-y-auto border-l border-ink-600 bg-ink-850">
-      <div className="border-b border-ink-600 px-4 py-3">
-        <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-text-muted">
-          Bölge Analizi
-        </h2>
+      <div className="flex gap-1 border-b border-ink-600 px-4 pt-2.5" role="tablist">
+        {(
+          [
+            { id: "region", label: "Bölge Analizi" },
+            { id: "network", label: "Ağ Analizi" },
+          ] as const
+        ).map(({ id, label }) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={panelTab === id}
+            onClick={() => dispatch(panelTabChanged(id))}
+            className={cn(
+              "rounded-t border-b-2 px-3 py-2 font-display text-[12.5px] font-semibold uppercase tracking-wide transition-colors",
+              panelTab === id
+                ? "border-accent text-text"
+                : "border-transparent text-text-faint hover:text-text-muted",
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
+      {panelTab === "network" ? (
+        <div className="flex-1 p-4">
+          <NetworkPanel />
+        </div>
+      ) : (
       <div className="flex-1 space-y-4 p-4">
         {!analysisRing ? (
           <div className="rounded-md border border-dashed border-ink-600 px-4 py-8 text-center">
@@ -256,6 +286,7 @@ export function AnalysisPanel() {
           </Button>
         )}
       </div>
+      )}
     </aside>
   );
 }

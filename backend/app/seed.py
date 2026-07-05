@@ -54,6 +54,58 @@ PRODUCT_CATALOG = [
 ]
 
 
+# Türkiye geneli talep noktaları (il merkezleri, ağırlık ≈ göreli pazar büyüklüğü) —
+# ağ analizi demoları için (ısı haritası, ağırlık merkezi, en yakın depo ataması).
+CUSTOMER_POINTS: list[tuple[str, float, float, int]] = [
+    ("İstanbul", 41.01, 28.98, 25), ("Ankara", 39.93, 32.86, 18), ("İzmir", 38.42, 27.14, 15),
+    ("Bursa", 40.19, 29.06, 10), ("Antalya", 36.90, 30.71, 9), ("Adana", 37.00, 35.32, 8),
+    ("Konya", 37.87, 32.49, 7), ("Gaziantep", 37.07, 37.38, 7), ("Kocaeli", 40.85, 29.88, 6),
+    ("Mersin", 36.80, 34.63, 5), ("Diyarbakır", 37.91, 40.24, 5), ("Kayseri", 38.72, 35.49, 5),
+    ("Samsun", 41.29, 36.33, 5), ("Şanlıurfa", 37.16, 38.79, 4), ("Trabzon", 41.00, 39.72, 4),
+    ("Eskişehir", 39.78, 30.52, 4), ("Denizli", 37.78, 29.09, 3), ("Malatya", 38.35, 38.31, 3),
+    ("Erzurum", 39.90, 41.27, 3), ("Van", 38.49, 43.38, 3), ("Tekirdağ", 40.98, 27.51, 3),
+    ("Balıkesir", 39.65, 27.89, 3), ("Manisa", 38.61, 27.43, 3), ("Sakarya", 40.76, 30.38, 3),
+    ("Hatay", 36.20, 36.16, 3), ("Kahramanmaraş", 37.58, 36.93, 3), ("Aydın", 37.85, 27.85, 2),
+    ("Muğla", 37.22, 28.36, 2), ("Çorum", 40.55, 34.95, 2), ("Sivas", 39.75, 37.02, 2),
+    ("Ordu", 40.98, 37.88, 2), ("Afyonkarahisar", 38.76, 30.54, 2), ("Batman", 37.88, 41.13, 2),
+    ("Mardin", 37.31, 40.74, 2), ("Elazığ", 38.68, 39.22, 2), ("Rize", 41.02, 40.52, 1),
+    ("Kastamonu", 41.38, 33.78, 1), ("Isparta", 37.77, 30.55, 1), ("Tokat", 40.31, 36.55, 1),
+    ("Zonguldak", 41.45, 31.79, 1), ("Edirne", 41.68, 26.56, 1), ("Çanakkale", 40.15, 26.41, 1),
+    ("Kütahya", 39.42, 29.98, 1), ("Uşak", 38.68, 29.40, 1), ("Niğde", 37.97, 34.68, 1),
+    ("Aksaray", 38.37, 34.03, 1), ("Karaman", 37.18, 33.22, 1), ("Kırıkkale", 39.84, 33.51, 1),
+    ("Yozgat", 39.82, 34.81, 1), ("Amasya", 40.65, 35.83, 1), ("Giresun", 40.91, 38.39, 1),
+    ("Erzincan", 39.75, 39.49, 1), ("Ağrı", 39.72, 43.05, 1), ("Muş", 38.73, 41.49, 1),
+    ("Bitlis", 38.40, 42.11, 1), ("Siirt", 37.93, 41.94, 1), ("Adıyaman", 37.76, 38.28, 1),
+    ("Osmaniye", 37.07, 36.25, 1), ("Düzce", 40.84, 31.16, 1), ("Bolu", 40.74, 31.61, 1),
+]
+
+
+def _seed_customers(db, org_id: int) -> int:
+    """Adds Turkey-wide demand points if missing (idempotent by name)."""
+    from app.models import Customer
+
+    existing = set(
+        db.scalars(select(Customer.name).where(Customer.org_id == org_id)).all()
+    )
+    created = 0
+    for city, lat, lng, weight in CUSTOMER_POINTS:
+        name = f"{city} Bayi"
+        if name in existing:
+            continue
+        db.add(
+            Customer(
+                org_id=org_id,
+                name=name,
+                location=geo.latlng_to_point(LatLng(lat=lat, lng=lng)),
+                weight=weight,
+                city=city,
+            )
+        )
+        created += 1
+    db.flush()
+    return created
+
+
 # Ankara çevresi ek demo depoları — bölgesel raporlama (İç Anadolu) demoları için.
 EXTRA_WAREHOUSES = [
     {
@@ -171,9 +223,13 @@ def seed() -> None:
         existing = db.scalar(select(User).where(User.email == DEMO_EMAIL))
         if existing is not None:
             created = _seed_extra_warehouses(db, existing.org_id, existing.id)
+            created_customers = _seed_customers(db, existing.org_id)
             db.commit()
-            if created:
-                print(f"Temel seed mevcut; {created} ek Ankara deposu eklendi.")
+            if created or created_customers:
+                print(
+                    f"Temel seed mevcut; {created} ek depo, "
+                    f"{created_customers} müşteri noktası eklendi."
+                )
             else:
                 print(f"Seed zaten mevcut ({DEMO_EMAIL}); atlanıyor.")
             return
@@ -337,6 +393,7 @@ def seed() -> None:
                 )
 
         extra = _seed_extra_warehouses(db, org.id, owner.id)
+        _seed_customers(db, org.id)
 
         db.commit()
         bin_count = len(bins)

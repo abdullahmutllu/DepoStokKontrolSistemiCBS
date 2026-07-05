@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  abcBucket,
   OCCUPANCY_COLORS,
   occupancyBucket,
   occupancyColor,
@@ -36,5 +37,20 @@ describe("occupancyBucket", () => {
     expect(occupancyColor(30, 100)).toBe(OCCUPANCY_COLORS.low);
     expect(occupancyColor(70, 100)).toBe(OCCUPANCY_COLORS.mid);
     expect(occupancyColor(90, 100)).toBe(OCCUPANCY_COLORS.high);
+  });
+});
+
+describe("abcBucket", () => {
+  it("hareketsiz gözler idle", () => {
+    expect(abcBucket(0, 10)).toBe("idle");
+    expect(abcBucket(5, 0)).toBe("idle");
+  });
+
+  it("maksimumun payına göre A/B/C sınıflar", () => {
+    expect(abcBucket(10, 10)).toBe("a"); // %100
+    expect(abcBucket(5, 10)).toBe("a"); // %50 sınırı dahil
+    expect(abcBucket(4, 10)).toBe("b");
+    expect(abcBucket(2, 10)).toBe("b"); // %20 sınırı dahil
+    expect(abcBucket(1, 10)).toBe("c");
   });
 });

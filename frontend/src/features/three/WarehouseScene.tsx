@@ -1,16 +1,48 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { Edges, Grid, Instance, Instances, OrbitControls, Text } from "@react-three/drei";
+import {
+  Edges,
+  Environment,
+  Grid,
+  Instance,
+  Instances,
+  Line,
+  OrbitControls,
+  Text,
+  useGLTF,
+} from "@react-three/drei";
+import { Bloom, EffectComposer, N8AO, SMAA } from "@react-three/postprocessing";
 import * as THREE from "three";
 import { easing } from "maath";
 import { useAppDispatch, useAppSelector } from "@/app/hooks";
 import { binSelected } from "@/features/three/selectionSlice";
-import type { BinInstance, CameraPreset, SceneModel } from "@/features/three/sceneModel";
 import {
+  buildBinAlertPins,
+  buildLedStrips,
+  buildPalletPlacements,
+  buildRackAlertPins,
+  type AlertPin,
+  type BinInstance,
+  type CameraPreset,
+  type SceneModel,
+} from "@/features/three/sceneModel";
+import {
+  ABC_COLORS,
+  abcBucket,
   DIMMED_COLOR,
   HIGHLIGHT_COLOR,
   OCCUPANCY_COLORS,
 } from "@/features/three/occupancy";
+import type { PolicyRoute } from "@/types";
+
+export type ViewMode = "analytic" | "realistic";
+export type ColorMode = "occupancy" | "movement";
+
+/** Data color of a bin under the active color mode. */
+function dataColor(bin: BinInstance, colorMode: ColorMode, maxMove: number): string {
+  if (colorMode === "movement") return ABC_COLORS[abcBucket(bin.movementCount, maxMove)];
+  return OCCUPANCY_COLORS[bin.bucket];
+}
 
 /* ── Bins: two instanced groups (shells + fills), per-instance color ──────── */
 
@@ -34,19 +66,34 @@ function fillColor(
   selectedId: number | null,
   highlightSet: Set<number>,
   highlightActive: boolean,
+  colorMode: ColorMode,
+  maxMove: number,
 ): string {
   if (bin.id === selectedId) return HIGHLIGHT_COLOR;
   if (highlightActive && !highlightSet.has(bin.id)) return DIMMED_COLOR;
-  return OCCUPANCY_COLORS[bin.bucket];
+  return dataColor(bin, colorMode, maxMove);
 }
 
-function Bins({ bins }: { bins: BinInstance[] }) {
+function Bins({
+  bins,
+  viewMode,
+  colorMode,
+}: {
+  bins: BinInstance[];
+  viewMode: ViewMode;
+  colorMode: ColorMode;
+}) {
   const dispatch = useAppDispatch();
   const selectedId = useAppSelector((s) => s.selection.selectedId);
   const highlightedIds = useAppSelector((s) => s.selection.highlightedIds);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const highlightSet = useMemo(() => new Set(highlightedIds), [highlightedIds]);
   const highlightActive = highlightSet.size > 0;
+  const realistic = viewMode === "realistic";
+  const maxMove = useMemo(
+    () => bins.reduce((m, b) => Math.max(m, b.movementCount), 0),
+    [bins],
+  );
 
   const onClick = (bin: BinInstance) => (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
@@ -58,10 +105,16 @@ function Bins({ bins }: { bins: BinInstance[] }) {
 
   return (
     <group>
-      {/* Shells: translucent cell frames carrying dim/highlight state */}
+      {/* Shells: translucent cell frames carrying dim/highlight state.
+          In realistic mode they fade to near-invisible but stay clickable. */}
       <Instances limit={Math.max(1, bins.length)} castShadow={false} receiveShadow={false}>
         <boxGeometry />
-        <meshStandardMaterial transparent opacity={0.32} roughness={0.7} metalness={0.1} />
+        <meshStandardMaterial
+          transparent
+          opacity={realistic ? 0.05 : 0.32}
+          roughness={0.7}
+          metalness={0.1}
+        />
         {bins.map((bin) => (
           <Instance
             key={bin.id}
@@ -83,8 +136,9 @@ function Bins({ bins }: { bins: BinInstance[] }) {
         ))}
       </Instances>
 
-      {/* Fills: opaque stock volume, height = occupancy ratio */}
-      {filled.length > 0 && (
+      {/* Fills: opaque stock volume, height = occupancy ratio (analytic only —
+          realistic mode replaces them with pallet + carton GLTF instances) */}
+      {!realistic && filled.length > 0 && (
         <Instances limit={Math.max(1, filled.length)} castShadow receiveShadow>
           <boxGeometry />
           <meshStandardMaterial roughness={0.55} metalness={0.05} />
@@ -94,7 +148,7 @@ function Bins({ bins }: { bins: BinInstance[] }) {
               position={bin.fillCenter}
               scale={bin.fillSize}
               rotation={[0, bin.rotationY, 0]}
-              color={fillColor(bin, selectedId, highlightSet, highlightActive)}
+              color={fillColor(bin, selectedId, highlightSet, highlightActive, colorMode, maxMove)}
               onClick={onClick(bin)}
             />
           ))}
@@ -239,6 +293,403 @@ function Floor({ model }: { model: SceneModel }) {
   );
 }
 
+/* ── Industrial dressing: dock shutters, floor safety paint, rack signs ───── */
+
+function DockDoors({ dock }: { dock: SceneModel["dock"] }) {
+  const ribs = dock.filter((p) => p.part === "rib");
+  const rails = dock.filter((p) => p.part === "rail");
+  const rolls = dock.filter((p) => p.part === "roll");
+  return (
+    <group>
+      <Instances limit={Math.max(1, ribs.length)}>
+        <boxGeometry />
+        <meshStandardMaterial color="#8d99ad" roughness={0.38} metalness={0.72} />
+        {ribs.map((p, i) => (
+          <Instance key={i} position={p.center} scale={p.size} />
+        ))}
+      </Instances>
+      <Instances limit={Math.max(1, rails.length)}>
+        <boxGeometry />
+        <meshStandardMaterial color="#3a4358" roughness={0.6} metalness={0.4} />
+        {rails.map((p, i) => (
+          <Instance key={i} position={p.center} scale={p.size} />
+        ))}
+      </Instances>
+      <Instances limit={Math.max(1, rolls.length)}>
+        <boxGeometry />
+        <meshStandardMaterial color="#242c3f" roughness={0.55} metalness={0.5} />
+        {rolls.map((p, i) => (
+          <Instance key={i} position={p.center} scale={p.size} />
+        ))}
+      </Instances>
+    </group>
+  );
+}
+
+function SafetyMarkings({ safety }: { safety: SceneModel["safety"] }) {
+  return (
+    <group>
+      {safety.map((m, i) => (
+        <group key={i} position={m.center} rotation={[0, m.rotationY, 0]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={m.size} />
+            <meshBasicMaterial
+              color={m.kind === "line" ? "#e8c33a" : "#d9a83a"}
+              transparent
+              opacity={m.kind === "line" ? 0.75 : 0.55}
+              depthWrite={false}
+            />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function RackSigns({ signs }: { signs: SceneModel["signs"] }) {
+  return (
+    <group>
+      {signs.map((sign) => (
+        <group
+          key={sign.id}
+          position={sign.center}
+          rotation={[0, sign.rotationY + Math.PI, 0]}
+        >
+          <mesh>
+            <boxGeometry args={[sign.width, 0.46, 0.05]} />
+            <meshStandardMaterial color="#1c4f95" roughness={0.5} metalness={0.2} />
+          </mesh>
+          <Text
+            position={[0, 0, -0.035]}
+            rotation={[0, Math.PI, 0]}
+            fontSize={0.24}
+            color="#f2f5fb"
+            anchorX="center"
+            anchorY="middle"
+          >
+            {sign.code}
+          </Text>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/* ── Realistic layer: GLTF pallets/cartons + forklifts + LED strips ───────── */
+
+interface FittedGltf {
+  meshes: { geometry: THREE.BufferGeometry; material: THREE.Material }[];
+  nativeSize: THREE.Vector3;
+  nativeCenter: THREE.Vector3;
+}
+
+/** Bakes node transforms into geometry so instances need only pos/scale/rot. */
+function useFittedGltf(url: string): FittedGltf {
+  const gltf = useGLTF(url);
+  return useMemo(() => {
+    gltf.scene.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    const nativeSize = new THREE.Vector3();
+    const nativeCenter = new THREE.Vector3();
+    box.getSize(nativeSize);
+    box.getCenter(nativeCenter);
+    const meshes: FittedGltf["meshes"] = [];
+    gltf.scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.isMesh) {
+        const geometry = mesh.geometry.clone();
+        geometry.applyMatrix4(mesh.matrixWorld);
+        meshes.push({ geometry, material: mesh.material as THREE.Material });
+      }
+    });
+    return { meshes, nativeSize, nativeCenter };
+  }, [gltf]);
+}
+
+/** Instance transform that fits the model's bbox into a target box. */
+function fitInstance(
+  fitted: FittedGltf,
+  center: [number, number, number],
+  size: [number, number, number],
+  rotationY: number,
+) {
+  const s: [number, number, number] = [
+    size[0] / Math.max(1e-4, fitted.nativeSize.x),
+    size[1] / Math.max(1e-4, fitted.nativeSize.y),
+    size[2] / Math.max(1e-4, fitted.nativeSize.z),
+  ];
+  const ox = -s[0] * fitted.nativeCenter.x;
+  const oy = -s[1] * fitted.nativeCenter.y;
+  const oz = -s[2] * fitted.nativeCenter.z;
+  const cos = Math.cos(rotationY);
+  const sin = Math.sin(rotationY);
+  const position: [number, number, number] = [
+    center[0] + ox * cos + oz * sin,
+    center[1] + oy,
+    center[2] - ox * sin + oz * cos,
+  ];
+  return { position, scale: s, rotation: [0, rotationY, 0] as [number, number, number] };
+}
+
+function PalletLayer({ bins }: { bins: BinInstance[] }) {
+  const pallet = useFittedGltf("/models/pallet.glb");
+  const boxSingle = useFittedGltf("/models/box_single.glb");
+  const boxStack = useFittedGltf("/models/box_stack.glb");
+  const placements = useMemo(() => buildPalletPlacements(bins), [bins]);
+  const singles = placements.filter((p) => p.boxKind === "single");
+  const stacks = placements.filter((p) => p.boxKind === "stack");
+
+  return (
+    <group>
+      {pallet.meshes.map((m, mi) => (
+        <Instances key={`p${mi}`} limit={Math.max(1, placements.length)} geometry={m.geometry} material={m.material} castShadow receiveShadow>
+          {placements.map((p) => (
+            <Instance key={p.binId} {...fitInstance(pallet, p.center, p.size, p.rotationY)} />
+          ))}
+        </Instances>
+      ))}
+      {boxSingle.meshes.map((m, mi) => (
+        <Instances key={`s${mi}`} limit={Math.max(1, singles.length)} geometry={m.geometry} material={m.material} castShadow receiveShadow>
+          {singles.map((p) => (
+            <Instance key={p.binId} {...fitInstance(boxSingle, p.boxCenter!, p.boxSize!, p.rotationY)} />
+          ))}
+        </Instances>
+      ))}
+      {boxStack.meshes.map((m, mi) => (
+        <Instances key={`k${mi}`} limit={Math.max(1, stacks.length)} geometry={m.geometry} material={m.material} castShadow receiveShadow>
+          {stacks.map((p) => (
+            <Instance key={p.binId} {...fitInstance(boxStack, p.boxCenter!, p.boxSize!, p.rotationY)} />
+          ))}
+        </Instances>
+      ))}
+    </group>
+  );
+}
+
+function LedStrips({
+  bins,
+  colorMode,
+}: {
+  bins: BinInstance[];
+  colorMode: ColorMode;
+}) {
+  const strips = useMemo(() => buildLedStrips(bins), [bins]);
+  const byId = useMemo(() => new Map(bins.map((b) => [b.id, b])), [bins]);
+  const maxMove = useMemo(
+    () => bins.reduce((m, b) => Math.max(m, b.movementCount), 0),
+    [bins],
+  );
+  return (
+    <Instances limit={Math.max(1, strips.length)}>
+      <boxGeometry />
+      <meshBasicMaterial toneMapped={false} />
+      {strips.map((s) => (
+        <Instance
+          key={s.binId}
+          position={s.center}
+          scale={s.size}
+          rotation={[0, s.rotationY, 0]}
+          color={dataColor(byId.get(s.binId)!, colorMode, maxMove)}
+        />
+      ))}
+    </Instances>
+  );
+}
+
+/* ── Stock alert pins: red/amber map pins above low-stock bins & racks ────── */
+
+const ALERT_COLORS = { critical: "#e25c4a", warning: "#e0a93e" } as const;
+
+/** Gentle bob so pins catch the eye; only animates while frames are already
+ * being produced (interaction/convergence), so demand mode stays idle. */
+function AlertPins({ bins, racks }: { bins: BinInstance[]; racks: SceneModel["racks"] }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const pins = useMemo(
+    () => [...buildBinAlertPins(bins), ...buildRackAlertPins(bins, racks)],
+    [bins, racks],
+  );
+
+  useFrame(({ clock }) => {
+    const g = groupRef.current;
+    if (!g) return;
+    const bob = Math.sin(clock.elapsedTime * 2.2) * 0.05;
+    g.position.y = bob;
+  });
+
+  if (pins.length === 0) return null;
+
+  const byLevel = (level: AlertPin["level"]) => pins.filter((p) => p.level === level);
+  return (
+    <group ref={groupRef}>
+      {(["critical", "warning"] as const).map((level) => {
+        const levelPins = byLevel(level);
+        if (levelPins.length === 0) return null;
+        return (
+          <group key={level}>
+            {/* Heads: sphere on top of the stem */}
+            <Instances limit={Math.max(1, levelPins.length)}>
+              <sphereGeometry args={[0.16, 14, 14]} />
+              <meshBasicMaterial color={ALERT_COLORS[level]} toneMapped={false} />
+              {levelPins.map((p) => (
+                <Instance
+                  key={`${p.level}-${p.refId}`}
+                  position={[p.tip[0], p.tip[1] + 0.34 * p.scale, p.tip[2]]}
+                  scale={p.scale}
+                />
+              ))}
+            </Instances>
+            {/* Stems: cone pointing down at the bin/rack */}
+            <Instances limit={Math.max(1, levelPins.length)}>
+              <coneGeometry args={[0.09, 0.3, 10]} />
+              <meshBasicMaterial color={ALERT_COLORS[level]} toneMapped={false} />
+              {levelPins.map((p) => (
+                <Instance
+                  key={`${p.level}-${p.refId}`}
+                  position={[p.tip[0], p.tip[1] + 0.15 * p.scale, p.tip[2]]}
+                  scale={p.scale}
+                  rotation={[Math.PI, 0, 0]}
+                />
+              ))}
+            </Instances>
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+/* ── Pick route: animated dashed line + numbered stop markers ─────────────── */
+
+function RouteOverlay({ route }: { route: PolicyRoute | null }) {
+  const { invalidate } = useThree();
+  const matRef = useRef<{ dashOffset: number } | null>(null);
+  const startRef = useRef(0);
+
+  useEffect(() => {
+    if (!route) return;
+    startRef.current = performance.now();
+    invalidate();
+  }, [route, invalidate]);
+
+  useFrame(() => {
+    if (!route) return;
+    const elapsed = (performance.now() - startRef.current) / 1000;
+    if (matRef.current) matRef.current.dashOffset = -elapsed * 1.6;
+    // Animate ~8s after each route change, then settle back to demand mode.
+    if (elapsed < 8) invalidate();
+  });
+
+  const points = useMemo(
+    () =>
+      route
+        ? route.path.map((p) => [p.x, 0.07, p.y] as [number, number, number])
+        : [],
+    [route],
+  );
+
+  if (!route || points.length < 2) return null;
+  return (
+    <group>
+      <Line
+        points={points}
+        color="#9dc1ff"
+        lineWidth={2.5}
+        dashed
+        dashSize={0.55}
+        gapSize={0.3}
+        ref={(line: unknown) => {
+          const l = line as { material?: { dashOffset: number } } | null;
+          matRef.current = l?.material ?? null;
+        }}
+      />
+      {route.stops.map((stop, i) => (
+        <group key={stop.location_id} position={[stop.x, 0, stop.y]}>
+          <mesh position={[0, 0.32, 0]}>
+            <sphereGeometry args={[i === 0 ? 0.22 : 0.16, 16, 16]} />
+            <meshBasicMaterial
+              color={i === 0 ? "#9dc1ff" : "#5e8bff"}
+              toneMapped={false}
+            />
+          </mesh>
+          <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.3, 0.42, 24]} />
+            <meshBasicMaterial color="#9dc1ff" transparent opacity={0.5} depthWrite={false} />
+          </mesh>
+          <Text
+            position={[0, 0.95, 0]}
+            fontSize={0.42}
+            color="#e8ecf6"
+            outlineWidth={0.03}
+            outlineColor="#0f1522"
+            anchorX="center"
+            anchorY="middle"
+          >
+            {String(stop.order)}
+          </Text>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function Forklifts({ props: placements }: { props: SceneModel["props"] }) {
+  const gltf = useGLTF("/models/forklift.glb");
+  const fitted = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const scale = 2.3 / Math.max(1e-4, Math.max(size.x, size.z));
+    return { scale, liftY: -box.min.y * scale };
+  }, [gltf]);
+  const clones = useMemo(
+    () => placements.map(() => gltf.scene.clone(true)),
+    [gltf, placements],
+  );
+  return (
+    <group>
+      {placements.map((p, i) => (
+        <primitive
+          key={i}
+          object={clones[i]}
+          position={[p.center[0], fitted.liftY, p.center[2]]}
+          scale={fitted.scale}
+          rotation={[0, p.rotationY, 0]}
+        />
+      ))}
+    </group>
+  );
+}
+
+/* ── N8AO under frameloop="demand": ~16-frame invalidate chain after every
+      interaction so the denoiser converges instead of freezing noisy. ─────── */
+
+function ConvergenceDriver({ frames = 16 }: { frames?: number }) {
+  const { invalidate, controls } = useThree();
+  const remaining = useRef(frames);
+
+  useEffect(() => {
+    const orbit = controls as unknown as {
+      addEventListener?: (type: string, cb: () => void) => void;
+      removeEventListener?: (type: string, cb: () => void) => void;
+    } | null;
+    const kick = () => {
+      remaining.current = frames;
+      invalidate();
+    };
+    kick();
+    orbit?.addEventListener?.("change", kick);
+    return () => orbit?.removeEventListener?.("change", kick);
+  }, [controls, frames, invalidate]);
+
+  useFrame(() => {
+    if (remaining.current > 0) {
+      remaining.current -= 1;
+      invalidate();
+    }
+  });
+  return null;
+}
+
 /* ── Camera rig: damped flights to preset views under demand frameloop ────── */
 
 function CameraRig({
@@ -281,18 +732,29 @@ function CameraRig({
 
 /* ── Scene root ────────────────────────────────────────────────────────────── */
 
+const LITE_MODE =
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).has("lite");
+
 export function WarehouseScene({
   model,
   presetRequest,
   onPresetArrived,
+  viewMode = "analytic",
+  colorMode = "occupancy",
+  route = null,
 }: {
   model: SceneModel;
   presetRequest: CameraPreset | null;
   onPresetArrived: () => void;
+  viewMode?: ViewMode;
+  colorMode?: ColorMode;
+  route?: PolicyRoute | null;
 }) {
   const dispatch = useAppDispatch();
   const { width, depth } = model.floor;
   const camDist = Math.max(width, depth);
+  const realistic = viewMode === "realistic";
 
   return (
     <Canvas
@@ -305,11 +767,11 @@ export function WarehouseScene({
       onPointerMissed={() => dispatch(binSelected(null))}
       data-testid="warehouse-3d-canvas"
     >
-      <ambientLight intensity={0.55} />
-      <hemisphereLight args={["#aab8d8", "#131a2a", 0.7]} />
+      <ambientLight intensity={realistic ? 0.35 : 0.55} />
+      <hemisphereLight args={["#aab8d8", "#131a2a", realistic ? 0.45 : 0.7]} />
       <directionalLight
         position={[width * 0.65, camDist * 1.2, depth * 0.4]}
-        intensity={1.3}
+        intensity={realistic ? 1.05 : 1.3}
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
@@ -321,11 +783,44 @@ export function WarehouseScene({
         shadow-camera-far={camDist * 4}
       />
       <directionalLight position={[-width * 0.4, camDist * 0.5, -depth * 0.4]} intensity={0.25} />
+      {/* Self-hosted HDRI — `files`, never `preset` (preset fetches a CDN). */}
+      <Suspense fallback={null}>
+        <Environment
+          files="/hdri/empty_warehouse_01_1k.hdr"
+          environmentIntensity={realistic ? 0.6 : 0.3}
+        />
+      </Suspense>
 
       <Floor model={model} />
       <Walls walls={model.walls} />
       <RackSkeleton frames={model.frames} />
-      <Bins bins={model.bins} />
+      <Bins bins={model.bins} viewMode={viewMode} colorMode={colorMode} />
+      <DockDoors dock={model.dock} />
+      <SafetyMarkings safety={model.safety} />
+      <RackSigns signs={model.signs} />
+      <AlertPins bins={model.bins} racks={model.racks} />
+      <RouteOverlay route={route} />
+
+      {realistic && (
+        <Suspense fallback={null}>
+          <PalletLayer bins={model.bins} />
+          <Forklifts props={model.props} />
+          <LedStrips bins={model.bins} colorMode={colorMode} />
+        </Suspense>
+      )}
+
+      {realistic && !LITE_MODE && (
+        <>
+          {/* multisampling=0: MSAA blit, WebGL2'de derinlik formatı uyarısı
+              basıyor; kenar yumuşatmayı zaten SMAA sağlıyor. */}
+          <EffectComposer multisampling={0}>
+            <N8AO quality="medium" halfRes aoRadius={0.4} intensity={1.15} />
+            <Bloom mipmapBlur intensity={0.3} luminanceThreshold={0.75} />
+            <SMAA />
+          </EffectComposer>
+          <ConvergenceDriver />
+        </>
+      )}
 
       <CameraRig request={presetRequest} onArrived={onPresetArrived} />
       <OrbitControls

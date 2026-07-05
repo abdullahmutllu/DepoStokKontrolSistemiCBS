@@ -52,6 +52,10 @@ class Bin3DOut(BaseModel):
     rotation: float
     capacity: int | None
     quantity: int
+    movement_count: int = 0  # son 30 gün, giriş+çıkış toplamı (hareket/ABC modu)
+    # Gözdeki bir ürünün org geneli stoğu eşiğin altındaysa "critical",
+    # eşiğin 1.5 katının altındaysa "warning" — 3B uyarı pinleri bunu çizer.
+    alert: str | None = None
 
 
 class Layout3DOut(BaseModel):

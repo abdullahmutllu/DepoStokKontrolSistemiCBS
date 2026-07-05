@@ -1,5 +1,17 @@
 import { http, HttpResponse } from "msw";
-import type { Layout3D, LocationDetail, RegionAnalysis, User, Warehouse } from "@/types";
+import type {
+  CenterOfGravity,
+  ClosestFacility,
+  Coverage,
+  Customer,
+  DemandPoint,
+  Layout3D,
+  LocationDetail,
+  PickRoute,
+  RegionAnalysis,
+  User,
+  Warehouse,
+} from "@/types";
 
 export const demoUser: User = { id: 1, org_id: 1, email: "owner@demo.co", role: "owner" };
 
@@ -40,9 +52,9 @@ export const demoLayout: Layout3D = {
     },
   ],
   bins: [
-    { id: 101, code: "Z1-A1-R1-S1-B1", pos_x: 1, pos_y: 1, pos_z: 0, dim_w: 1, dim_d: 1, dim_h: 1.5, rotation: 0, capacity: 100, quantity: 30 },
-    { id: 102, code: "Z1-A1-R1-S1-B2", pos_x: 2, pos_y: 1, pos_z: 0, dim_w: 1, dim_d: 1, dim_h: 1.5, rotation: 0, capacity: 100, quantity: 0 },
-    { id: 103, code: "Z1-A1-R1-S2-B1", pos_x: 1, pos_y: 1, pos_z: 1.5, dim_w: 1, dim_d: 1, dim_h: 1.5, rotation: 0, capacity: 100, quantity: 95 },
+    { id: 101, code: "Z1-A1-R1-S1-B1", pos_x: 1, pos_y: 1, pos_z: 0, dim_w: 1, dim_d: 1, dim_h: 1.5, rotation: 0, capacity: 100, quantity: 30, movement_count: 12, alert: "critical" },
+    { id: 102, code: "Z1-A1-R1-S1-B2", pos_x: 2, pos_y: 1, pos_z: 0, dim_w: 1, dim_d: 1, dim_h: 1.5, rotation: 0, capacity: 100, quantity: 0, movement_count: 0, alert: null },
+    { id: 103, code: "Z1-A1-R1-S2-B1", pos_x: 1, pos_y: 1, pos_z: 1.5, dim_w: 1, dim_d: 1, dim_h: 1.5, rotation: 0, capacity: 100, quantity: 95, movement_count: 3, alert: "warning" },
   ],
 };
 
@@ -81,6 +93,109 @@ export const demoRegionAnalysis: RegionAnalysis = {
       distance_to_centroid_m: 351.2,
     },
   ],
+};
+
+export const demoCustomers: Customer[] = [
+  { id: 1, name: "İstanbul Perakende", location: { lat: 41.01, lng: 28.97 }, weight: 25, city: "İstanbul", created_at: "2026-01-01T00:00:00Z" },
+  { id: 2, name: "Ankara Bayi", location: { lat: 39.92, lng: 32.85 }, weight: 18, city: "Ankara", created_at: "2026-01-01T00:00:00Z" },
+  { id: 3, name: "İzmir Market", location: { lat: 38.42, lng: 27.14 }, weight: 15, city: "İzmir", created_at: "2026-01-01T00:00:00Z" },
+];
+
+export const demoDemandPoints: DemandPoint[] = demoCustomers.map(
+  ({ id, name, location, weight }) => ({ id, name, location, weight }),
+);
+
+export const demoCog: CenterOfGravity = {
+  n_sites: 1,
+  proposed_sites: [
+    { location: { lat: 40.11, lng: 29.61 }, assigned_customers: 3, assigned_weight: 58 },
+  ],
+  assignments: demoCustomers.map((c) => ({
+    customer_id: c.id,
+    from_location: c.location,
+    to_location: { lat: 40.11, lng: 29.61 },
+    weight: c.weight,
+    distance_m: 150_000,
+  })),
+  current_total_weighted_km: 12_400,
+  proposed_total_weighted_km: 9_300,
+  improvement_percent: 25,
+};
+
+export const demoClosestFacility: ClosestFacility = {
+  assignments: demoCustomers.map((c) => ({
+    customer_id: c.id,
+    from_location: c.location,
+    to_location: demoWarehouse.location,
+    weight: c.weight,
+    distance_m: 90_000,
+  })),
+  loads: [
+    {
+      warehouse_id: 3,
+      warehouse_name: "İstanbul Ana Depo",
+      location: demoWarehouse.location,
+      customer_count: 3,
+      total_weight: 58,
+      avg_distance_km: 214.5,
+    },
+  ],
+  territories: [
+    {
+      warehouse_id: 3,
+      ring: [
+        { lat: 36, lng: 26 },
+        { lat: 36, lng: 45 },
+        { lat: 42, lng: 45 },
+        { lat: 42, lng: 26 },
+      ],
+    },
+  ],
+};
+
+export const demoCoverage: Coverage = {
+  mode: "rings",
+  note: "Kuş uçuşu halkalar (10/25/50 km) — ORS anahtarı ile sürüş süresi kapsamı açılır.",
+  warehouses: [
+    {
+      warehouse_id: 3,
+      warehouse_name: "İstanbul Ana Depo",
+      bands: [10, 25, 50].map((radius_km) => ({
+        radius_km,
+        ring: [
+          { lat: 41 - radius_km / 111, lng: 28.79 },
+          { lat: 41.06, lng: 28.79 + radius_km / 85 },
+          { lat: 41 + radius_km / 111, lng: 28.79 },
+          { lat: 41.06, lng: 28.79 - radius_km / 85 },
+        ],
+        customer_count: radius_km >= 25 ? 1 : 0,
+        covered_weight: radius_km >= 25 ? 25 : 0,
+      })),
+      isochrones: null,
+    },
+  ],
+  uncovered_customers: 2,
+  uncovered_weight: 33,
+};
+
+export const demoPickRoute: PickRoute = {
+  warehouse_id: 3,
+  pick_count: 2,
+  best_policy: "optimized",
+  routes: (["s_shape", "largest_gap", "optimized"] as const).map((policy, i) => ({
+    policy,
+    total_m: [42.5, 38.0, 31.5][i],
+    stops: [
+      { order: 1, location_id: 101, code: "Z1-A1-R1-S1-B1", x: 1.5, y: 1.5, product_sku: "RLM-6204", quantity: 5 },
+      { order: 2, location_id: 103, code: "Z1-A1-R1-S2-B1", x: 1.5, y: 1.5, product_sku: null, quantity: null },
+    ],
+    path: [
+      { x: 20, y: 0 },
+      { x: 1.5, y: 0 },
+      { x: 1.5, y: 1.5 },
+      { x: 20, y: 0 },
+    ],
+  })),
 };
 
 export const handlers = [
@@ -135,6 +250,17 @@ export const handlers = [
   }),
 
   http.get("/api/v1/notifications/unread-count", () => HttpResponse.json({ unread: 0 })),
+
+  http.get("/api/v1/customers", () => HttpResponse.json(demoCustomers)),
+  http.post("/api/v1/customers/import-csv", () =>
+    HttpResponse.json({ created: 2, updated: 1, errors: [] }),
+  ),
+  http.get("/api/v1/network/demand-points", () => HttpResponse.json(demoDemandPoints)),
+  http.post("/api/v1/network/center-of-gravity", () => HttpResponse.json(demoCog)),
+  http.get("/api/v1/network/closest-facility", () => HttpResponse.json(demoClosestFacility)),
+  http.get("/api/v1/network/coverage", () => HttpResponse.json(demoCoverage)),
+  http.get("/api/v1/network/flow-map", () => HttpResponse.json({ arcs: [] })),
+  http.post("/api/v1/warehouses/:id/pick-route", () => HttpResponse.json(demoPickRoute)),
 
   http.post("/api/v1/geo/region-analysis", () => HttpResponse.json(demoRegionAnalysis)),
   http.get("/api/v1/regions", () => HttpResponse.json([])),

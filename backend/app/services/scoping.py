@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError
-from app.models import Product, Region, StorageLocation, Warehouse
+from app.models import Customer, Product, Region, StorageLocation, Warehouse
 
 
 def get_owned_warehouse(db: Session, org_id: int, warehouse_id: int) -> Warehouse:
@@ -23,6 +23,15 @@ def get_owned_product(db: Session, org_id: int, product_id: int) -> Product:
     if product is None:
         raise NotFoundError("Ürün bulunamadı")
     return product
+
+
+def get_owned_customer(db: Session, org_id: int, customer_id: int) -> Customer:
+    customer = db.scalar(
+        select(Customer).where(Customer.id == customer_id, Customer.org_id == org_id)
+    )
+    if customer is None:
+        raise NotFoundError("Müşteri noktası bulunamadı")
+    return customer
 
 
 def get_owned_region(db: Session, org_id: int, region_id: int) -> Region:

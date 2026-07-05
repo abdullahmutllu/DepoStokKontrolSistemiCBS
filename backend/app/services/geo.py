@@ -47,6 +47,17 @@ def polygon_to_ring(value: WKBElement | WKTElement | None) -> list[LatLng] | Non
     return [LatLng(lat=y, lng=x) for x, y in geom.exterior.coords]
 
 
+def haversine_km(a: LatLng, b: LatLng) -> float:
+    """Great-circle distance in km — network analysis over ~60 demand points
+    is cheaper and more testable in Python than round-tripping PostGIS."""
+    r = 6371.0
+    lat1, lat2 = math.radians(a.lat), math.radians(b.lat)
+    dlat = lat2 - lat1
+    dlng = math.radians(b.lng - a.lng)
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(h))
+
+
 def ring_to_polygon(ring: list[LatLng]) -> WKTElement:
     """User-drawn ring → PostGIS polygon. Auto-closes; needs ≥3 distinct vertices."""
     points = [(p.lng, p.lat) for p in ring]

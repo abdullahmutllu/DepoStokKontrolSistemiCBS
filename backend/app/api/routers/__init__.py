@@ -5,11 +5,14 @@ def register_routers(app: FastAPI) -> None:
     from app.api.routers import (
         ai,
         auth,
+        customers,
         dxf,
         geo,
         layout,
         locations,
+        network,
         notifications,
+        picking,
         products,
         regions,
         reports,
@@ -30,3 +33,6 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(ai.router, prefix=prefix)
     app.include_router(geo.router, prefix=prefix)
     app.include_router(regions.router, prefix=prefix)
+    app.include_router(customers.router, prefix=prefix)
+    app.include_router(network.router, prefix=prefix)
+    app.include_router(picking.router, prefix=prefix)

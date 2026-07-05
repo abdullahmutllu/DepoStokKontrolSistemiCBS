@@ -1,10 +1,12 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.models import Product, StockItem, StorageLocation, User
+from app.models import Product, StockItem, StockMovement, StorageLocation, User
 from app.schemas.location import (
     Bin3DOut,
     BinStockOut,
@@ -62,6 +64,60 @@ def layout_3d(
         ).all()
     }
 
+    # Movement heat: how many times each bin was touched in the last 30 days.
+    # from/to sides counted separately so a transfer heats both ends.
+    since = datetime.now(UTC) - timedelta(days=30)
+    movement_counts: dict[int, int] = {}
+    for col in (StockMovement.from_location_id, StockMovement.to_location_id):
+        rows = db.execute(
+            select(col, func.count().label("n"))
+            .join(StorageLocation, col == StorageLocation.id)
+            .where(
+                StorageLocation.warehouse_id == warehouse.id,
+                StockMovement.created_at >= since,
+            )
+            .group_by(col)
+        ).all()
+        for loc_id, n in rows:
+            movement_counts[loc_id] = movement_counts.get(loc_id, 0) + n
+
+    # Stock alerts: a bin inherits the worst state of the products it holds —
+    # org-wide product total ≤ threshold → critical, ≤ 1.5×threshold → warning.
+    holdings = db.execute(
+        select(StockItem.location_id, Product.id, Product.min_stock_threshold)
+        .join(Product, StockItem.product_id == Product.id)
+        .join(StorageLocation, StockItem.location_id == StorageLocation.id)
+        .where(
+            StorageLocation.warehouse_id == warehouse.id,
+            StockItem.quantity > 0,
+            Product.min_stock_threshold > 0,
+        )
+    ).all()
+    product_ids = {pid for _, pid, _ in holdings}
+    org_totals = (
+        {
+            pid: total
+            for pid, total in db.execute(
+                select(StockItem.product_id, func.coalesce(func.sum(StockItem.quantity), 0))
+                .where(StockItem.product_id.in_(product_ids))
+                .group_by(StockItem.product_id)
+            ).all()
+        }
+        if product_ids
+        else {}
+    )
+    alerts: dict[int, str] = {}
+    for loc_id, pid, threshold in holdings:
+        total = org_totals.get(pid, 0)
+        if total <= threshold:
+            level = "critical"
+        elif total <= threshold * 1.5:
+            level = "warning"
+        else:
+            continue
+        if alerts.get(loc_id) != "critical":
+            alerts[loc_id] = level
+
     zones, aisles, racks, shelves, bins = [], [], [], [], []
     for loc in locations:
         if loc.type == "zone":
@@ -86,6 +142,8 @@ def layout_3d(
                     rotation=loc.rotation,
                     capacity=loc.capacity,
                     quantity=quantities.get(loc.id, 0),
+                    movement_count=movement_counts.get(loc.id, 0),
+                    alert=alerts.get(loc.id),
                 )
             )
 

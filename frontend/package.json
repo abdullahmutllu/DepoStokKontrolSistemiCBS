@@ -26,6 +26,7 @@
     "@radix-ui/react-tooltip": "^1.2.7",
     "@react-three/drei": "^10.3.0",
     "@react-three/fiber": "^9.1.2",
+    "@react-three/postprocessing": "^3.0.4",
     "@reduxjs/toolkit": "^2.8.2",
     "@turf/turf": "^7.3.5",
     "class-variance-authority": "^0.7.1",

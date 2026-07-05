@@ -170,3 +170,84 @@ class TestGeneration:
         assert len(layout["shelves"]) == 3
         shelf_heights = sorted(s["pos_z"] for s in layout["shelves"])
         assert shelf_heights == [0.0, 1.5, 3.0]
+
+    def test_layout_3d_movement_counts(
+        self,
+        client,
+        auth_headers,
+        org_factory,
+        user_factory,
+        warehouse_factory,
+        product_factory,
+        layout_factory,
+    ):
+        """Movement heat: receive + transfer touches count per bin (30 days)."""
+        org = org_factory()
+        user = user_factory(org)
+        wh = warehouse_factory(org)
+        product = product_factory(org)
+        _, bins = layout_factory(org, wh)
+        headers = auth_headers(user)
+
+        r = client.post(
+            "/api/v1/stock/receive",
+            json={"product_id": product.id, "location_id": bins[0].id, "quantity": 10},
+            headers=headers,
+        )
+        assert r.status_code == 200
+        r = client.post(
+            "/api/v1/stock/transfer",
+            json={
+                "product_id": product.id,
+                "from_location_id": bins[0].id,
+                "to_location_id": bins[1].id,
+                "quantity": 4,
+            },
+            headers=headers,
+        )
+        assert r.status_code == 200
+
+        layout = client.get(f"/api/v1/warehouses/{wh.id}/layout-3d", headers=headers).json()
+        counts = {b["id"]: b["movement_count"] for b in layout["bins"]}
+        assert counts[bins[0].id] == 2  # receive (to) + transfer (from)
+        assert counts[bins[1].id] == 1  # transfer (to)
+        untouched = [b for b in layout["bins"] if b["id"] not in (bins[0].id, bins[1].id)]
+        assert all(b["movement_count"] == 0 for b in untouched)
+
+    def test_layout_3d_stock_alerts(
+        self,
+        client,
+        auth_headers,
+        org_factory,
+        user_factory,
+        warehouse_factory,
+        product_factory,
+        layout_factory,
+    ):
+        """Eşik altı ürün taşıyan göz critical, 1.5× eşik altı warning pin alır."""
+        org = org_factory()
+        user = user_factory(org)
+        wh = warehouse_factory(org)
+        critical_p = product_factory(org, threshold=20)  # stok 10 ≤ 20 → critical
+        warning_p = product_factory(org, threshold=20)  # stok 25 ≤ 30 → warning
+        ok_p = product_factory(org, threshold=20)  # stok 100 > 30 → pin yok
+        _, bins = layout_factory(org, wh)
+        headers = auth_headers(user)
+
+        for product, bin_loc, qty in (
+            (critical_p, bins[0], 10),
+            (warning_p, bins[1], 25),
+            (ok_p, bins[2], 100),
+        ):
+            r = client.post(
+                "/api/v1/stock/receive",
+                json={"product_id": product.id, "location_id": bin_loc.id, "quantity": qty},
+                headers=headers,
+            )
+            assert r.status_code == 200
+
+        layout = client.get(f"/api/v1/warehouses/{wh.id}/layout-3d", headers=headers).json()
+        alerts = {b["id"]: b["alert"] for b in layout["bins"]}
+        assert alerts[bins[0].id] == "critical"
+        assert alerts[bins[1].id] == "warning"
+        assert alerts[bins[2].id] is None

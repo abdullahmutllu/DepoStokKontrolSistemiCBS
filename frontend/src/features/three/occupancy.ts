@@ -36,3 +36,30 @@ export const OCCUPANCY_LEGEND: { bucket: OccupancyBucket; label: string }[] = [
   { bucket: "mid", label: "%60–85" },
   { bucket: "high", label: "%85 üstü" },
 ];
+
+/* ── Movement heat (ABC): who gets touched, not who is full ────────────────── */
+
+export type AbcBucket = "a" | "b" | "c" | "idle";
+
+export const ABC_COLORS: Record<AbcBucket, string> = {
+  a: "#e25c4a", // hot movers
+  b: "#e0a93e",
+  c: "#3fb970", // slow movers
+  idle: "#3d475c",
+};
+
+/** Simple share-of-max ABC: A ≥ %50, B ≥ %20, C > 0, hareketsiz = idle. */
+export function abcBucket(count: number, maxCount: number): AbcBucket {
+  if (count <= 0 || maxCount <= 0) return "idle";
+  const ratio = count / maxCount;
+  if (ratio >= 0.5) return "a";
+  if (ratio >= 0.2) return "b";
+  return "c";
+}
+
+export const ABC_LEGEND: { bucket: AbcBucket; label: string }[] = [
+  { bucket: "a", label: "A · yoğun" },
+  { bucket: "b", label: "B · orta" },
+  { bucket: "c", label: "C · seyrek" },
+  { bucket: "idle", label: "Hareketsiz" },
+];

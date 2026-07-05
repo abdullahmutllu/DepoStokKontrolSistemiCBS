@@ -12,6 +12,22 @@ import {
   ringDrawn,
   warehouseSelected,
 } from "@/features/map/mapWorkspaceSlice";
+import {
+  useClosestFacilityQuery,
+  useCoverageQuery,
+  useDemandPointsQuery,
+  useFlowMapQuery,
+} from "@/api/endpoints/network";
+import {
+  assignmentFC,
+  coverageFC,
+  demandFC,
+  emptyNetworkData,
+  flowFC,
+  proposedSitesFC,
+  syncNetworkLayers,
+  voronoiFC,
+} from "@/features/map/networkLayers";
 import { WarehousePopup } from "@/features/map/WarehousePopup";
 
 interface GisMapProps {
@@ -24,6 +40,17 @@ export function GisMap({ warehouses }: GisMapProps) {
   const basemapId = useAppSelector((s) => s.mapWorkspace.basemapId);
   const selectedWarehouseId = useAppSelector((s) => s.mapWorkspace.selectedWarehouseId);
   const analysisRing = useAppSelector((s) => s.mapWorkspace.analysisRing);
+  const networkToggles = useAppSelector((s) => s.mapWorkspace.networkLayers);
+  const cogResult = useAppSelector((s) => s.mapWorkspace.cogResult);
+
+  const demand = useDemandPointsQuery(undefined, {
+    skip: !networkToggles.customers && !networkToggles.heatmap,
+  });
+  const closest = useClosestFacilityQuery(undefined, {
+    skip: !networkToggles.assignments && !networkToggles.voronoi,
+  });
+  const coverage = useCoverageQuery(undefined, { skip: !networkToggles.coverage });
+  const flow = useFlowMapQuery(undefined, { skip: !networkToggles.flow });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
@@ -105,6 +132,37 @@ export function GisMap({ warehouses }: GisMapProps) {
       drawRef.current?.clear();
     }
   }, [analysisRing, mapReady]);
+
+  // Network-analysis layers — kept BELOW Terra Draw's layers so drawings stay
+  // interactive; visibility (not add/remove) toggling survives basemap switches.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const data = emptyNetworkData();
+    if (demand.data) data.demand = demandFC(demand.data);
+    if (closest.data) {
+      data.assignments = assignmentFC(closest.data.assignments, "current");
+      data.voronoi = voronoiFC(closest.data);
+    }
+    if (coverage.data) data.coverage = coverageFC(coverage.data);
+    if (flow.data) data.flow = flowFC(flow.data.arcs);
+    if (cogResult) {
+      data.proposed = proposedSitesFC(cogResult);
+      data.proposedAssignments = assignmentFC(cogResult.assignments, "proposed");
+    }
+    const beforeId = map
+      .getStyle()
+      .layers?.find((l) => l.id.startsWith("td-"))?.id;
+    syncNetworkLayers(map, data, networkToggles, cogResult !== null, beforeId);
+  }, [
+    mapReady,
+    networkToggles,
+    cogResult,
+    demand.data,
+    closest.data,
+    coverage.data,
+    flow.data,
+  ]);
 
   // Occupancy-colored, stock-scaled warehouse markers.
   useEffect(() => {

@@ -1,11 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildBinAlertPins,
+  buildBinInstance,
+  buildDockDoors,
+  buildLedStrips,
+  buildPalletPlacements,
+  buildProps,
+  buildRackAlertPins,
   buildRackFrames,
+  buildRackSigns,
+  buildSafetyMarkings,
   buildSceneModel,
   buildWalls,
   buildZoneMarkings,
   cameraPresets,
+  palletStackLayers,
   sceneHeight,
+  type ZoneQuad,
 } from "@/features/three/sceneModel";
 import { demoLayout } from "@/test/mocks/handlers";
 
@@ -143,5 +154,163 @@ describe("sceneHeight & markings & presets", () => {
     const top = presets.find((p) => p.id === "top")!;
     expect(top.position[1]).toBeGreaterThan(40); // above the span
     expect(top.target).toEqual([20, 0, 12.5]);
+  });
+});
+
+describe("buildDockDoors", () => {
+  it("büyük depoda güney (açık) + 2 kuzey (kapalı) kepenk üretir", () => {
+    const parts = buildDockDoors(40, 25, 6);
+    const rolls = parts.filter((p) => p.part === "roll");
+    const rails = parts.filter((p) => p.part === "rail");
+    expect(rolls).toHaveLength(3); // 1 güney + 2 kuzey
+    expect(rails).toHaveLength(6); // kapı başına 2 ray
+    // Kuzey kapılar kuzey duvar düzleminde (z ≈ depth - WALL_T/2).
+    const northRolls = rolls.filter((r) => r.center[2] > 20);
+    expect(northRolls).toHaveLength(2);
+  });
+
+  it("güney kepenk çoğunlukla açık: kuzey kapıdan az rib taşır", () => {
+    const parts = buildDockDoors(40, 25, 6);
+    const southRibs = parts.filter((p) => p.part === "rib" && p.center[2] < 1);
+    const northRibs = parts.filter((p) => p.part === "rib" && p.center[2] > 20);
+    expect(southRibs.length).toBeGreaterThan(0);
+    expect(northRibs.length / 2).toBeGreaterThan(southRibs.length); // kapı başına
+  });
+
+  it("küçük depoda kuzey dokları atlar", () => {
+    const parts = buildDockDoors(10, 8, 4);
+    expect(parts.filter((p) => p.part === "roll")).toHaveLength(1);
+  });
+});
+
+describe("buildSafetyMarkings", () => {
+  const aisle: ZoneQuad = {
+    id: 2,
+    code: "Z1-A1",
+    kind: "aisle",
+    center: [10, 0.014, 5],
+    size: [16, 3],
+    labelPos: [0, 0, 0],
+  };
+
+  it("koridor başına iki kenar çizgisi, uzun eksene paralel", () => {
+    const marks = buildSafetyMarkings(40, 25, [aisle]);
+    const lines = marks.filter((m) => m.kind === "line");
+    expect(lines).toHaveLength(2);
+    // Yatay koridor (w>d): çizgiler z kenarlarında, koridor genişliğini kaplar.
+    expect(lines[0].size[0]).toBeCloseTo(16);
+    const edges = lines.map((l) => l.center[2]).sort((a, b) => a - b);
+    expect(edges).toEqual([3.5, 6.5]);
+  });
+
+  it("kapı önüne 45° taralı şeritler koyar", () => {
+    const marks = buildSafetyMarkings(40, 25, []);
+    const hatches = marks.filter((m) => m.kind === "hatch");
+    expect(hatches.length).toBeGreaterThanOrEqual(3);
+    for (const h of hatches) {
+      expect(h.rotationY).toBeCloseTo(Math.PI / 4);
+      expect(h.center[2]).toBeGreaterThan(0.25); // duvarın önünde
+      expect(h.center[2]).toBeLessThan(3);
+    }
+  });
+});
+
+describe("gerçekçi mod kurucuları", () => {
+  it("palletStackLayers doluluk oranını 0-4 katmana eşler", () => {
+    expect(palletStackLayers(0)).toBe(0);
+    expect(palletStackLayers(0.1)).toBe(1);
+    expect(palletStackLayers(0.45)).toBe(2);
+    expect(palletStackLayers(0.7)).toBe(3);
+    expect(palletStackLayers(0.95)).toBe(4);
+  });
+
+  it("buildPalletPlacements boş gözleri atlar, paleti göz tabanına oturtur", () => {
+    const bins = demoLayout.bins.map(buildBinInstance);
+    const placements = buildPalletPlacements(bins);
+    expect(placements).toHaveLength(2); // 102 boş → yok
+    const low = placements.find((p) => p.binId === 101)!; // 30/100
+    const binLow = bins.find((b) => b.id === 101)!;
+    const binBottom = binLow.center[1] - binLow.size[1] / 2;
+    expect(low.center[1]).toBeCloseTo(binBottom + 0.144 / 2);
+    expect(low.layers).toBe(2); // 0.3 → 2 katman
+    expect(low.boxKind).toBe("stack");
+    // Koliler paletin üstünde başlar.
+    expect(low.boxCenter![1] - low.boxSize![1] / 2).toBeCloseTo(binBottom + 0.144, 5);
+  });
+
+  it("buildLedStrips şeridi gözün ön-alt kenarına koyar", () => {
+    const bins = demoLayout.bins.map(buildBinInstance);
+    const strips = buildLedStrips(bins);
+    expect(strips).toHaveLength(bins.length);
+    const s = strips.find((x) => x.binId === 101)!;
+    const bin = bins.find((b) => b.id === 101)!;
+    expect(s.center[2]).toBeLessThan(bin.center[2]); // ön yüz (−z)
+    expect(s.center[1]).toBeLessThan(bin.center[1]); // alt kenar
+    expect(s.bucket).toBe("low");
+  });
+
+  it("buildProps küçük depoda 1, büyükte 2 forklift yerleştirir", () => {
+    expect(buildProps(12, 10)).toHaveLength(1);
+    const two = buildProps(40, 25);
+    expect(two).toHaveLength(2);
+    for (const p of two) {
+      expect(p.center[0]).toBeGreaterThan(0);
+      expect(p.center[0]).toBeLessThan(40);
+    }
+  });
+
+  it("buildRackSigns tabelayı rafın üstüne, ön yüze asar", () => {
+    const model = buildSceneModel(demoLayout);
+    const signs = buildRackSigns(model.racks);
+    expect(signs).toHaveLength(1);
+    const rack = model.racks[0];
+    expect(signs[0].code).toBe("Z1-A1-R1");
+    expect(signs[0].center[1]).toBeGreaterThan(rack.center[1] + rack.size[1] / 2);
+    expect(signs[0].center[2]).toBeLessThan(rack.center[2] - rack.size[2] / 2);
+  });
+
+  it("buildSceneModel yeni katmanları içerir", () => {
+    const model = buildSceneModel(demoLayout);
+    expect(model.dock.length).toBeGreaterThan(0);
+    expect(model.signs).toHaveLength(model.racks.length);
+    expect(model.props.length).toBeGreaterThanOrEqual(1);
+    expect(model.safety.some((m) => m.kind === "hatch")).toBe(true);
+  });
+});
+
+describe("stok uyarı pinleri", () => {
+  const bins = demoLayout.bins.map(buildBinInstance); // 101 critical, 103 warning
+
+  it("buildBinAlertPins yalnız alert'li gözlere, gözün üstüne pin koyar", () => {
+    const pins = buildBinAlertPins(bins);
+    expect(pins).toHaveLength(2);
+    const critical = pins.find((p) => p.refId === 101)!;
+    expect(critical.level).toBe("critical");
+    const bin = bins.find((b) => b.id === 101)!;
+    expect(critical.tip[1]).toBeGreaterThan(bin.center[1] + bin.size[1] / 2);
+    expect(pins.some((p) => p.refId === 102)).toBe(false); // alert'siz göz pin almaz
+  });
+
+  it("buildRackAlertPins rafın en kötü durumunu büyük pin olarak yukarı asar", () => {
+    const model = buildSceneModel(demoLayout);
+    const pins = buildRackAlertPins(bins, model.racks);
+    expect(pins).toHaveLength(1);
+    expect(pins[0].level).toBe("critical"); // critical, warning'i ezer
+    expect(pins[0].scale).toBeGreaterThan(1);
+    const rack = model.racks[0];
+    expect(pins[0].tip[1]).toBeGreaterThan(rack.center[1] + rack.size[1] / 2);
+  });
+
+  it("ayak izi dışındaki gözler rafın pinini etkilemez", () => {
+    const farBin = {
+      ...bins[0],
+      id: 999,
+      center: [30, 1, 20] as [number, number, number],
+      alert: "critical" as const,
+    };
+    const model = buildSceneModel(demoLayout);
+    const cleanBins = bins.map((b) => ({ ...b, alert: null }));
+    const pins = buildRackAlertPins([...cleanBins, farBin], model.racks);
+    expect(pins).toHaveLength(0);
   });
 });
