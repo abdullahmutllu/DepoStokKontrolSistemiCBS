@@ -217,6 +217,45 @@ def _seed_extra_warehouses(db, org_id: int, user_id: int) -> int:
     return created
 
 
+def _seed_orders(db, org_id: int) -> int:
+    """Dalga toplama demosu için açık siparişler (isimle idempotent)."""
+    from app.models import Order, OrderLine, Product, Warehouse
+
+    if db.scalar(select(Order).where(Order.org_id == org_id)) is not None:
+        return 0
+    warehouse = db.scalar(
+        select(Warehouse).where(Warehouse.org_id == org_id).order_by(Warehouse.id)
+    )
+    products = list(
+        db.scalars(select(Product).where(Product.org_id == org_id).order_by(Product.id)).all()
+    )
+    if warehouse is None or len(products) < 6:
+        return 0
+    specs = [
+        ("Aslan Market", [(0, 12), (2, 4)]),
+        ("Yıldız İnşaat", [(1, 8), (3, 2), (5, 6)]),
+        ("Kaya Otomotiv", [(2, 10), (4, 3)]),
+        ("Demir Tarım", [(0, 5), (5, 9)]),
+    ]
+    created = 0
+    for customer_name, lines in specs:
+        order = Order(
+            org_id=org_id, warehouse_id=warehouse.id, code="", customer_name=customer_name
+        )
+        db.add(order)
+        db.flush()
+        order.code = f"SIP-{order.id:04d}"
+        for product_idx, qty in lines:
+            db.add(
+                OrderLine(
+                    order_id=order.id, product_id=products[product_idx].id, quantity=qty
+                )
+            )
+        created += 1
+    db.flush()
+    return created
+
+
 def seed() -> None:
     db = SessionLocal()
     try:
@@ -224,11 +263,13 @@ def seed() -> None:
         if existing is not None:
             created = _seed_extra_warehouses(db, existing.org_id, existing.id)
             created_customers = _seed_customers(db, existing.org_id)
+            created_orders = _seed_orders(db, existing.org_id)
             db.commit()
-            if created or created_customers:
+            if created or created_customers or created_orders:
                 print(
                     f"Temel seed mevcut; {created} ek depo, "
-                    f"{created_customers} müşteri noktası eklendi."
+                    f"{created_customers} müşteri noktası, "
+                    f"{created_orders} sipariş eklendi."
                 )
             else:
                 print(f"Seed zaten mevcut ({DEMO_EMAIL}); atlanıyor.")
@@ -394,6 +435,7 @@ def seed() -> None:
 
         extra = _seed_extra_warehouses(db, org.id, owner.id)
         _seed_customers(db, org.id)
+        _seed_orders(db, org.id)
 
         db.commit()
         bin_count = len(bins)

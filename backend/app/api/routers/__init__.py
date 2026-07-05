@@ -8,10 +8,13 @@ def register_routers(app: FastAPI) -> None:
         customers,
         dxf,
         geo,
+        insights,
         layout,
         locations,
+        logistics,
         network,
         notifications,
+        orders,
         picking,
         products,
         regions,
@@ -36,3 +39,6 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(customers.router, prefix=prefix)
     app.include_router(network.router, prefix=prefix)
     app.include_router(picking.router, prefix=prefix)
+    app.include_router(logistics.router, prefix=prefix)
+    app.include_router(insights.router, prefix=prefix)
+    app.include_router(orders.router, prefix=prefix)

@@ -14,7 +14,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://localhost:8000",
+      // ws: true → canlı sevkiyat takibi WebSocket'i de proxy'lenir
+      "/api": { target: "http://localhost:8000", ws: true },
     },
   },
   test: {
