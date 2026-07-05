@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useAppSelector } from "@/app/hooks";
+import { useActiveShipmentsQuery } from "@/api/endpoints/logistics";
 
 /** Contextual map legend: explains exactly the symbols that are currently
  * visible — base warehouse markers always, network layers only when toggled. */
@@ -39,9 +40,13 @@ export function MapLegend() {
   const toggles = useAppSelector((s) => s.mapWorkspace.networkLayers);
   const cogResult = useAppSelector((s) => s.mapWorkspace.cogResult);
   const panelTab = useAppSelector((s) => s.mapWorkspace.panelTab);
+  const toursPreview = useAppSelector((s) => s.mapWorkspace.toursPreview);
+  const scenarioClosedIds = useAppSelector((s) => s.mapWorkspace.scenarioClosedIds);
+  const shipments = useActiveShipmentsQuery().data ?? [];
   const [open, setOpen] = useState(true);
 
   const networkActive = panelTab === "network";
+  const hasRoutes = shipments.length > 0 || toursPreview !== null;
 
   return (
     <div className="absolute bottom-8 left-3 z-10 w-56 rounded-md border border-ink-600 bg-ink-900/92 backdrop-blur">
@@ -103,7 +108,44 @@ export function MapLegend() {
               <Row swatch={line("#e0a93e", true)} label="Müşteri → önerilen depo" />
             </>
           )}
-          {!networkActive && (
+          {hasRoutes && (
+            <>
+              <Row
+                swatch={
+                  <span className="flex gap-0.5">
+                    {["#5e8bff", "#3fb970", "#e0a93e"].map((c) => (
+                      <span key={c} className="inline-block h-0.5 w-2 rounded" style={{ backgroundColor: c, marginTop: 5 }} />
+                    ))}
+                  </span>
+                }
+                label="Teslimat turu — her renk bir araç"
+              />
+              {shipments.length > 0 && (
+                <Row
+                  swatch={
+                    <span
+                      className="inline-block grid size-3.5 place-items-center rounded-full text-[7px] font-bold"
+                      style={{ backgroundColor: "#5e8bff", color: "#0f1522" }}
+                    >
+                      ▲
+                    </span>
+                  }
+                  label="Canlı araç — ok: yön, rozet: ilerleme %"
+                />
+              )}
+            </>
+          )}
+          {scenarioClosedIds.length > 0 && (
+            <Row
+              swatch={
+                <span className="inline-block text-[11px]" style={{ opacity: 0.4 }}>
+                  ✕
+                </span>
+              }
+              label="Soluk depo — what-if senaryosunda kapalı"
+            />
+          )}
+          {panelTab === "region" && (
             <Row
               swatch={
                 <span

@@ -16,6 +16,7 @@ import {
 import { formatArea, formatDistance } from "@/features/map/geometry";
 import { TURKEY_REGIONS } from "@/features/map/turkeyRegions";
 import { NetworkPanel } from "@/features/map/NetworkPanel";
+import { LogisticsPanel } from "@/features/map/LogisticsPanel";
 import { cn } from "@/lib/utils";
 import { apiErrorMessage } from "@/lib/apiError";
 import { Button } from "@/components/ui/button";
@@ -62,8 +63,9 @@ export function AnalysisPanel() {
       <div className="flex gap-1 border-b border-ink-600 px-4 pt-2.5" role="tablist">
         {(
           [
-            { id: "region", label: "Bölge Analizi" },
+            { id: "region", label: "Bölge" },
             { id: "network", label: "Ağ Analizi" },
+            { id: "logistics", label: "Sevkiyat" },
           ] as const
         ).map(({ id, label }) => (
           <button
@@ -83,7 +85,11 @@ export function AnalysisPanel() {
         ))}
       </div>
 
-      {panelTab === "network" ? (
+      {panelTab === "logistics" ? (
+        <div className="flex-1 p-4">
+          <LogisticsPanel />
+        </div>
+      ) : panelTab === "network" ? (
         <div className="flex-1 p-4">
           <NetworkPanel />
         </div>

@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
-import type { CenterOfGravity, LatLng } from "@/types";
+import type { CenterOfGravity, LatLng, Tour } from "@/types";
 
 export type MapTool =
   | "pan"
@@ -14,7 +14,7 @@ export interface MeasureReadout {
   value: number; // meters or m²
 }
 
-export type PanelTab = "region" | "network";
+export type PanelTab = "region" | "network" | "logistics";
 
 export interface NetworkLayerToggles {
   customers: boolean;
@@ -36,6 +36,12 @@ interface MapWorkspaceState {
   networkLayers: NetworkLayerToggles;
   /** Latest greenfield result — rendered on the map as proposed sites + lines. */
   cogResult: CenterOfGravity | null;
+  /** VRP tur önizlemesi — sevkiyata dönüştürülmeden haritada çizilir. */
+  toursPreview: { warehouseId: number; tours: Tour[] } | null;
+  /** What-if senaryosunda kapalı sayılan depolar (marker'lar soluklaşır). */
+  scenarioClosedIds: number[];
+  /** Akış animasyonu: seçili gün (YYYY-MM-DD) — null = tüm günler toplu. */
+  flowDay: string | null;
 }
 
 const initialState: MapWorkspaceState = {
@@ -54,6 +60,9 @@ const initialState: MapWorkspaceState = {
     flow: false,
   },
   cogResult: null,
+  toursPreview: null,
+  scenarioClosedIds: [],
+  flowDay: null,
 };
 
 const mapWorkspaceSlice = createSlice({
@@ -90,6 +99,18 @@ const mapWorkspaceSlice = createSlice({
     cogComputed(state, action: PayloadAction<CenterOfGravity | null>) {
       state.cogResult = action.payload;
     },
+    toursPreviewed(
+      state,
+      action: PayloadAction<{ warehouseId: number; tours: Tour[] } | null>,
+    ) {
+      state.toursPreview = action.payload;
+    },
+    scenarioClosed(state, action: PayloadAction<number[]>) {
+      state.scenarioClosedIds = action.payload;
+    },
+    flowDayChanged(state, action: PayloadAction<string | null>) {
+      state.flowDay = action.payload;
+    },
   },
 });
 
@@ -103,5 +124,8 @@ export const {
   panelTabChanged,
   networkLayerToggled,
   cogComputed,
+  toursPreviewed,
+  scenarioClosed,
+  flowDayChanged,
 } = mapWorkspaceSlice.actions;
 export default mapWorkspaceSlice.reducer;

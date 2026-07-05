@@ -39,8 +39,8 @@ export const networkApi = baseApi.injectEndpoints({
       query: () => "/network/coverage",
       providesTags: ["Network", "Customer", "Warehouse"],
     }),
-    flowMap: build.query<{ arcs: FlowArc[] }, void>({
-      query: () => "/network/flow-map",
+    flowMap: build.query<{ arcs: FlowArc[] }, { day?: string } | void>({
+      query: (params) => ({ url: "/network/flow-map", params: params ?? undefined }),
       providesTags: ["Network", "Movement"],
     }),
     pickRoute: build.mutation<

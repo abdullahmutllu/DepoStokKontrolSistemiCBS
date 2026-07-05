@@ -94,8 +94,39 @@ describe("AnalysisPanel sekmeleri", () => {
     expect(await screen.findByText("Analiz katmanları")).toBeInTheDocument();
     expect(screen.queryByText("Haritada bir bölge çizin")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Bölge Analizi" }));
+    await user.click(screen.getByRole("tab", { name: "Bölge" }));
     expect(screen.getByText("Haritada bir bölge çizin")).toBeInTheDocument();
+  });
+
+  it("Sevkiyat sekmesi LogisticsPanel'i açar", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AnalysisPanel />);
+    await user.click(screen.getByRole("tab", { name: "Sevkiyat" }));
+    expect(await screen.findByText(/Teslimat turları planla/)).toBeInTheDocument();
+  });
+});
+
+describe("NetworkPanel — what-if senaryosu", () => {
+  it("depo kapatınca senaryo kartı delta ve yeniden atamayı gösterir", async () => {
+    const user = userEvent.setup();
+    const { store } = renderWithProviders(<NetworkPanel />);
+    const card = await screen.findByTestId("scenario-card");
+    // Depo listesi yüklenince ilk depoyu kapat
+    await waitFor(() =>
+      expect(card.querySelector('input[type="checkbox"]')).not.toBeNull(),
+    );
+    const box = card.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    await user.click(box);
+    expect(store.getState().mapWorkspace.scenarioClosedIds).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "Senaryoyu hesapla" }));
+    const result = await screen.findByTestId("scenario-result");
+    expect(result).toHaveTextContent("%28.2");
+    expect(result).toHaveTextContent("9");
+    expect(result).toHaveTextContent("12→19");
+
+    await user.click(screen.getByRole("button", { name: /Senaryoyu temizle/ }));
+    expect(store.getState().mapWorkspace.scenarioClosedIds).toEqual([]);
   });
 });
 

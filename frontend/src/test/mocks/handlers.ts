@@ -5,10 +5,14 @@ import type {
   Coverage,
   Customer,
   DemandPoint,
+  Kpi,
   Layout3D,
   LocationDetail,
   PickRoute,
   RegionAnalysis,
+  ScenarioResult,
+  Shipment,
+  Tour,
   User,
   Warehouse,
 } from "@/types";
@@ -198,7 +202,102 @@ export const demoPickRoute: PickRoute = {
   })),
 };
 
+export const demoTour: Tour = {
+  vehicle_name: "Araç 1",
+  stops: [
+    { customer_id: 1, name: "İstanbul Perakende", location: { lat: 41.01, lng: 28.97 }, demand: 25, service_min: 12 },
+    { customer_id: 4, name: "Bursa Sanayi", location: { lat: 40.19, lng: 29.06 }, demand: 12, service_min: 12 },
+  ],
+  distance_km: 245.6,
+  duration_min: 258.4,
+  load: 37,
+};
+
+export const demoShipment: Shipment = {
+  id: 1,
+  warehouse_id: 3,
+  vehicle_name: "Araç 1",
+  total_km: 245.6,
+  total_min: 258.4,
+  time_scale: 30,
+  depart_at: "2026-07-05T09:00:00Z",
+  stop_count: 2,
+  live: {
+    status: "en_route",
+    position: { lat: 40.7, lng: 29.1 },
+    heading_deg: 118.5,
+    speed_kmh: 63.2,
+    progress_percent: 42.3,
+    completed_stops: 1,
+    current_stop: null,
+    next_stop: "Bursa Sanayi",
+    next_stop_eta_min: 38.5,
+    next_stop_remaining_km: 41.2,
+    eta_return_min: 149.1,
+    elapsed_sim_min: 109.3,
+  },
+  route: [
+    { lat: 41.06, lng: 28.79 },
+    { lat: 41.01, lng: 28.97 },
+    { lat: 40.19, lng: 29.06 },
+    { lat: 41.06, lng: 28.79 },
+  ],
+};
+
+export const demoScenario: ScenarioResult = {
+  closed_warehouse_ids: [3],
+  baseline: {
+    total_weighted_km: 12400,
+    avg_distance_km: 96.5,
+    uncovered_customers: 12,
+    loads: [],
+  },
+  scenario: {
+    total_weighted_km: 15900,
+    avg_distance_km: 128.3,
+    uncovered_customers: 19,
+    loads: [{ warehouse_id: 2, warehouse_name: "Ankara", customer_count: 24, total_weight: 180 }],
+  },
+  delta_weighted_km: 3500,
+  delta_percent: 28.2,
+  reassigned_customers: 9,
+};
+
+export const demoKpi: Kpi = {
+  inventory_turnover_30d: 0.42,
+  outbound_units_30d: 960,
+  inbound_units_30d: 1200,
+  movements_per_day_7d: 6.4,
+  occupancy_percent: 23.5,
+  active_alert_products: 1,
+  open_orders: 3,
+  active_shipments: 1,
+  busiest_product_sku: "RLM-6204",
+};
+
 export const handlers = [
+  http.get("/api/v1/shipments/active", () => HttpResponse.json([])),
+  http.post("/api/v1/network/vehicle-routes", () =>
+    HttpResponse.json({
+      warehouse_id: 3,
+      vehicle_count: 2,
+      capacity: 60,
+      tours: [demoTour],
+      total_km: 245.6,
+      unassigned_customers: 0,
+      note: "Kuş uçuşu mesafeler + durak başına 12 dk servis.",
+    }),
+  ),
+  http.post("/api/v1/shipments", () => HttpResponse.json([demoShipment], { status: 201 })),
+  http.delete("/api/v1/shipments", () => new HttpResponse(null, { status: 204 })),
+  http.get("/api/v1/shipments/:id", () =>
+    HttpResponse.json({ ...demoShipment, stops: [] }),
+  ),
+  http.post("/api/v1/network/scenario", () => HttpResponse.json(demoScenario)),
+  http.get("/api/v1/reports/kpi", () => HttpResponse.json(demoKpi)),
+  http.get("/api/v1/reports/reorder-suggestions", () => HttpResponse.json([])),
+  http.get("/api/v1/orders", () => HttpResponse.json([])),
+
   http.post("/api/v1/auth/login", async ({ request }) => {
     const body = (await request.json()) as { email: string; password: string };
     if (body.password === "yanlis") {

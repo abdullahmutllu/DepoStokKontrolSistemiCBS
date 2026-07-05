@@ -54,6 +54,8 @@ def coverage(
 
 @router.get("/flow-map", response_model=FlowMapOut)
 def flow_map(
-    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    day: str | None = None,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> FlowMapOut:
-    return network_analysis.flow_map(db, user.org_id)
+    return network_analysis.flow_map(db, user.org_id, day=day)

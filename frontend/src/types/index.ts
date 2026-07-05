@@ -447,6 +447,170 @@ export interface PickRoute {
   best_policy: string;
 }
 
+/* ── Faz 4: teslimat turları, canlı takip, senaryo, tahmin, KPI, sipariş ── */
+
+export interface TourStop {
+  customer_id: number;
+  name: string;
+  location: LatLng;
+  demand: number;
+  service_min: number;
+}
+
+export interface Tour {
+  vehicle_name: string;
+  stops: TourStop[];
+  distance_km: number;
+  duration_min: number;
+  load: number;
+}
+
+export interface VehicleRoutes {
+  warehouse_id: number;
+  vehicle_count: number;
+  capacity: number;
+  tours: Tour[];
+  total_km: number;
+  unassigned_customers: number;
+  note: string;
+}
+
+export interface VehicleLive {
+  status: "pending" | "en_route" | "at_stop" | "completed";
+  position: LatLng;
+  heading_deg: number;
+  speed_kmh: number;
+  progress_percent: number;
+  completed_stops: number;
+  current_stop: string | null;
+  next_stop: string | null;
+  next_stop_eta_min: number | null;
+  next_stop_remaining_km: number | null;
+  eta_return_min: number;
+  elapsed_sim_min: number;
+}
+
+export interface Shipment {
+  id: number;
+  warehouse_id: number;
+  vehicle_name: string;
+  total_km: number;
+  total_min: number;
+  time_scale: number;
+  depart_at: string;
+  stop_count: number;
+  live: VehicleLive;
+  route: LatLng[];
+}
+
+export interface ShipmentStopEta {
+  customer_id: number;
+  name: string;
+  location: LatLng;
+  demand: number;
+  status: "done" | "current" | "pending";
+  eta_min: number | null;
+  planned_arrive_min: number;
+}
+
+export interface ShipmentDetail extends Shipment {
+  stops: ShipmentStopEta[];
+}
+
+export interface ScenarioSide {
+  total_weighted_km: number;
+  avg_distance_km: number;
+  uncovered_customers: number;
+  loads: {
+    warehouse_id: number;
+    warehouse_name: string;
+    customer_count: number;
+    total_weight: number;
+  }[];
+}
+
+export interface ScenarioResult {
+  closed_warehouse_ids: number[];
+  baseline: ScenarioSide;
+  scenario: ScenarioSide;
+  delta_weighted_km: number;
+  delta_percent: number;
+  reassigned_customers: number;
+}
+
+export interface ForecastPoint {
+  day: string;
+  quantity: number;
+  kind: "actual" | "forecast";
+}
+
+export interface ProductForecast {
+  product_id: number;
+  sku: string;
+  name: string;
+  current_stock: number;
+  daily_avg: number;
+  daily_std: number;
+  reorder_point: number;
+  days_until_stockout: number | null;
+  series: ForecastPoint[];
+}
+
+export interface ReorderSuggestion {
+  product_id: number;
+  sku: string;
+  name: string;
+  current_stock: number;
+  reorder_point: number;
+  days_until_stockout: number | null;
+  suggested_order_qty: number;
+}
+
+export interface Kpi {
+  inventory_turnover_30d: number;
+  outbound_units_30d: number;
+  inbound_units_30d: number;
+  movements_per_day_7d: number;
+  occupancy_percent: number;
+  active_alert_products: number;
+  open_orders: number;
+  active_shipments: number;
+  busiest_product_sku: string | null;
+}
+
+export interface OrderLine {
+  product_id: number;
+  sku: string;
+  product_name: string;
+  quantity: number;
+}
+
+export interface CustomerOrder {
+  id: number;
+  code: string;
+  warehouse_id: number;
+  customer_name: string;
+  status: "open" | "waved" | "picked";
+  created_at: string;
+  lines: OrderLine[];
+}
+
+export interface WaveLine {
+  product_id: number;
+  sku: string;
+  product_name: string;
+  total_quantity: number;
+  location_id: number | null;
+  location_code: string | null;
+}
+
+export interface WavePick {
+  order_ids: number[];
+  warehouse_id: number;
+  lines: WaveLine[];
+  route: PickRoute | null;
+}
+
 export interface ApiError {
   error: {
     code: string;

@@ -350,12 +350,14 @@ def coverage(db: Session, org_id: int) -> CoverageOut:
 # ── Inter-facility flow map ──────────────────────────────────────────────────
 
 
-def flow_map(db: Session, org_id: int) -> FlowMapOut:
+def flow_map(db: Session, org_id: int, day: str | None = None) -> FlowMapOut:
+    """Depolar arası transfer arkları; `day` (YYYY-MM-DD) verilirse yalnız o
+    günün transferleri — haritadaki zaman animasyonu gün gün çağırır."""
     from_loc = aliased(StorageLocation)
     to_loc = aliased(StorageLocation)
     from_wh = aliased(Warehouse)
     to_wh = aliased(Warehouse)
-    rows = db.execute(
+    stmt = (
         select(
             from_wh.id,
             from_wh.name,
@@ -376,7 +378,10 @@ def flow_map(db: Session, org_id: int) -> FlowMapOut:
             from_wh.id != to_wh.id,
         )
         .group_by(from_wh.id, from_wh.name, from_wh.location, to_wh.id, to_wh.name, to_wh.location)
-    ).all()
+    )
+    if day is not None:
+        stmt = stmt.where(func.to_char(StockMovement.created_at, "YYYY-MM-DD") == day)
+    rows = db.execute(stmt).all()
     return FlowMapOut(
         arcs=[
             FlowArc(

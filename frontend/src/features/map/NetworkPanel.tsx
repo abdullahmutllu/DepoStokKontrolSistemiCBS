@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Crosshair, FileUp, X } from "lucide-react";
+import { Crosshair, FileUp, Pause, Play, PowerOff, X } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/app/hooks";
 import {
   useCenterOfGravityMutation,
@@ -10,11 +10,25 @@ import {
   useFlowMapQuery,
   useImportCustomersCsvMutation,
 } from "@/api/endpoints/network";
+import { useScenarioMutation } from "@/api/endpoints/logistics";
+import { useWarehousesQuery } from "@/api/endpoints/warehouses";
 import {
   cogComputed,
+  flowDayChanged,
   networkLayerToggled,
+  scenarioClosed,
   type NetworkLayerToggles,
 } from "@/features/map/mapWorkspaceSlice";
+import type { ScenarioResult } from "@/types";
+
+/** Son N günün YYYY-MM-DD listesi (eski → yeni). */
+function lastDays(n: number): string[] {
+  const out: string[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    out.push(new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
+  }
+  return out;
+}
 import { apiErrorMessage } from "@/lib/apiError";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
@@ -34,15 +48,59 @@ export function NetworkPanel() {
   const dispatch = useAppDispatch();
   const toggles = useAppSelector((s) => s.mapWorkspace.networkLayers);
   const cogResult = useAppSelector((s) => s.mapWorkspace.cogResult);
+  const flowDay = useAppSelector((s) => s.mapWorkspace.flowDay);
+  const scenarioClosedIds = useAppSelector((s) => s.mapWorkspace.scenarioClosedIds);
   const [nSites, setNSites] = useState(1);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const customers = useCustomersQuery();
+  const warehouses = useWarehousesQuery();
   const closest = useClosestFacilityQuery(undefined, { skip: !toggles.assignments && !toggles.voronoi });
   const coverage = useCoverageQuery(undefined, { skip: !toggles.coverage });
-  const flow = useFlowMapQuery(undefined, { skip: !toggles.flow });
+  const flow = useFlowMapQuery(flowDay ? { day: flowDay } : undefined, { skip: !toggles.flow });
   const [runCog, cogState] = useCenterOfGravityMutation();
   const [importCsv, importState] = useImportCustomersCsvMutation();
+  const [runScenario, scenarioState] = useScenarioMutation();
+  const [scenarioResult, setScenarioResult] = useState<ScenarioResult | null>(null);
+
+  // Akış zaman animasyonu: oynatılırken 14 günü 0.9 sn arayla gezer.
+  const [playing, setPlaying] = useState(false);
+  const days = lastDays(14);
+  useEffect(() => {
+    if (!playing) return;
+    let idx = flowDay ? Math.max(0, days.indexOf(flowDay)) : 0;
+    const timer = setInterval(() => {
+      idx = (idx + 1) % days.length;
+      dispatch(flowDayChanged(days[idx]));
+    }, 900);
+    return () => clearInterval(timer);
+    // days her render'da yeniden üretilir; içerik günde bir değişir
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, dispatch]);
+
+  const stopAnimation = () => {
+    setPlaying(false);
+    dispatch(flowDayChanged(null));
+  };
+
+  const toggleClosed = (id: number) => {
+    const next = scenarioClosedIds.includes(id)
+      ? scenarioClosedIds.filter((x) => x !== id)
+      : [...scenarioClosedIds, id];
+    dispatch(scenarioClosed(next));
+    setScenarioResult(null);
+  };
+
+  const computeScenario = async () => {
+    try {
+      const result = await runScenario({
+        closed_warehouse_ids: scenarioClosedIds,
+      }).unwrap();
+      setScenarioResult(result);
+    } catch (err) {
+      toast.error(apiErrorMessage(err as Parameters<typeof apiErrorMessage>[0]));
+    }
+  };
 
   const computeCog = async () => {
     try {
@@ -207,12 +265,138 @@ export function NetworkPanel() {
         ) : null
       )}
 
-      {/* Flow summary */}
-      {toggles.flow && flow.data && flow.data.arcs.length === 0 && (
+      {/* Flow: zaman animasyonu */}
+      {toggles.flow && (
+        <div className="rounded-md border border-ink-600 bg-ink-800 p-3" data-testid="flow-anim">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-faint">
+              Akış animasyonu · 14 gün
+            </h3>
+            <div className="flex items-center gap-1">
+              <button
+                aria-label={playing ? "Duraklat" : "Oynat"}
+                onClick={() => (playing ? setPlaying(false) : setPlaying(true))}
+                className="rounded p-1 text-text-muted hover:bg-ink-700 hover:text-accent"
+              >
+                {playing ? <Pause size={13} /> : <Play size={13} />}
+              </button>
+              {flowDay && (
+                <button
+                  onClick={stopAnimation}
+                  className="rounded p-1 text-text-faint hover:text-status-high"
+                  aria-label="Animasyonu sıfırla"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={days.length - 1}
+            value={flowDay ? Math.max(0, days.indexOf(flowDay)) : days.length - 1}
+            onChange={(e) => {
+              setPlaying(false);
+              dispatch(flowDayChanged(days[Number(e.target.value)]));
+            }}
+            className="mt-2 w-full accent-[#5e8bff]"
+            aria-label="Gün seç"
+          />
+          <div className="mt-1 flex items-center justify-between text-[10.5px] text-text-faint">
+            <span className="mono">{flowDay ?? "Tüm günler (toplam)"}</span>
+            <span>{flow.data?.arcs.length ?? 0} akış</span>
+          </div>
+        </div>
+      )}
+      {toggles.flow && !flowDay && flow.data && flow.data.arcs.length === 0 && (
         <p className="text-[12px] text-text-muted">
           Depolar arası transfer kaydı yok — Stok İşlemleri'nden transfer yapınca akış burada çizilir.
         </p>
       )}
+
+      {/* What-if: depo kapatma senaryosu */}
+      <div className="rounded-md border border-ink-600 bg-ink-800 p-3" data-testid="scenario-card">
+        <h3 className="mb-2 flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wide text-text-muted">
+          <PowerOff size={12} /> What-if: depo kapat
+        </h3>
+        <div className="space-y-1">
+          {(warehouses.data ?? []).map((w) => (
+            <label
+              key={w.id}
+              className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-[12px] hover:bg-ink-700/50"
+            >
+              <input
+                type="checkbox"
+                checked={scenarioClosedIds.includes(w.id)}
+                onChange={() => toggleClosed(w.id)}
+                className="accent-[#e25c4a]"
+              />
+              <span className={scenarioClosedIds.includes(w.id) ? "line-through opacity-60" : ""}>
+                {w.name}
+              </span>
+            </label>
+          ))}
+        </div>
+        <Button
+          className="mt-2 w-full"
+          variant="secondary"
+          onClick={() => void computeScenario()}
+          disabled={scenarioClosedIds.length === 0 || scenarioState.isLoading}
+        >
+          {scenarioState.isLoading ? "Hesaplanıyor…" : "Senaryoyu hesapla"}
+        </Button>
+
+        {scenarioResult && (
+          <div className="mt-3 space-y-2" data-testid="scenario-result">
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="rounded bg-ink-900 px-2 py-1.5">
+                <div className="mono text-[13px]">
+                  {scenarioResult.baseline.total_weighted_km.toLocaleString("tr-TR")} km
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-text-faint">Mevcut ağ</div>
+              </div>
+              <div className="rounded bg-ink-900 px-2 py-1.5">
+                <div
+                  className="mono text-[13px]"
+                  style={{ color: scenarioResult.delta_weighted_km > 0 ? "#e25c4a" : "#3fb970" }}
+                >
+                  {scenarioResult.scenario.total_weighted_km.toLocaleString("tr-TR")} km
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-text-faint">Senaryo</div>
+              </div>
+            </div>
+            <p className="text-[12px]">
+              Ağırlıklı taşıma mesafesi{" "}
+              <span
+                className="mono font-medium"
+                style={{ color: scenarioResult.delta_percent > 0 ? "#e25c4a" : "#3fb970" }}
+              >
+                %{Math.abs(scenarioResult.delta_percent)}
+              </span>{" "}
+              {scenarioResult.delta_percent > 0 ? "artar" : "azalır"};{" "}
+              <span className="mono">{scenarioResult.reassigned_customers}</span> müşteri başka
+              depoya taşınır, kapsama dışı{" "}
+              <span className="mono">
+                {scenarioResult.baseline.uncovered_customers}→
+                {scenarioResult.scenario.uncovered_customers}
+              </span>
+              .
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                setScenarioResult(null);
+                dispatch(scenarioClosed([]));
+              }}
+            >
+              <X size={12} /> Senaryoyu temizle
+            </Button>
+          </div>
+        )}
+      </div>
 
       {/* Customers row */}
       <div className="flex items-center justify-between rounded border border-ink-600 bg-ink-800 px-2.5 py-2">

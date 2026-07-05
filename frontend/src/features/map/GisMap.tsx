@@ -18,6 +18,14 @@ import {
   useDemandPointsQuery,
   useFlowMapQuery,
 } from "@/api/endpoints/network";
+import { useActiveShipmentsQuery } from "@/api/endpoints/logistics";
+import {
+  shipmentRoutes,
+  syncTrackingLayers,
+  tourColor,
+  tourRoutes,
+  vehicleMarkerHtml,
+} from "@/features/map/trackingLayers";
 import {
   assignmentFC,
   coverageFC,
@@ -43,6 +51,13 @@ export function GisMap({ warehouses }: GisMapProps) {
   const analysisRing = useAppSelector((s) => s.mapWorkspace.analysisRing);
   const networkToggles = useAppSelector((s) => s.mapWorkspace.networkLayers);
   const cogResult = useAppSelector((s) => s.mapWorkspace.cogResult);
+  const toursPreview = useAppSelector((s) => s.mapWorkspace.toursPreview);
+  const scenarioClosedIds = useAppSelector((s) => s.mapWorkspace.scenarioClosedIds);
+  const flowDay = useAppSelector((s) => s.mapWorkspace.flowDay);
+  // Canlı sevkiyatlar: WS/poll aboneliğini LogisticsPanel yönetir; harita
+  // yalnız RTK önbelleğini okur (çift soket açılmaz).
+  const shipmentsQuery = useActiveShipmentsQuery();
+  const shipments = shipmentsQuery.data ?? [];
 
   const demand = useDemandPointsQuery(undefined, {
     skip: !networkToggles.customers && !networkToggles.heatmap,
@@ -51,7 +66,9 @@ export function GisMap({ warehouses }: GisMapProps) {
     skip: !networkToggles.assignments && !networkToggles.voronoi,
   });
   const coverage = useCoverageQuery(undefined, { skip: !networkToggles.coverage });
-  const flow = useFlowMapQuery(undefined, { skip: !networkToggles.flow });
+  const flow = useFlowMapQuery(flowDay ? { day: flowDay } : undefined, {
+    skip: !networkToggles.flow,
+  });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
@@ -169,6 +186,71 @@ export function GisMap({ warehouses }: GisMapProps) {
     flow.data,
   ]);
 
+  // Teslimat turları + canlı sevkiyat rotaları (canlı olan önizlemeyi ezer).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const depot = toursPreview
+      ? warehousesRef.current.find((w) => w.id === toursPreview.warehouseId)?.location
+      : undefined;
+    const routes =
+      shipments.length > 0
+        ? shipmentRoutes(shipments)
+        : toursPreview && depot
+          ? tourRoutes(toursPreview.tours, depot)
+          : [];
+    const beforeId = map
+      .getStyle()
+      .layers?.find((l) => l.id.startsWith("td-"))?.id;
+    syncTrackingLayers(map, routes, beforeId);
+  }, [mapReady, toursPreview, shipments]);
+
+  // Canlı araç marker'ları: konum her karede değişir; DOM marker + CSS
+  // geçişiyle akıcı kayar, ok simgesi kerterize döner.
+  const vehicleMarkersRef = useRef(new Map<number, Marker>());
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const markers = vehicleMarkersRef.current;
+    const seen = new Set<number>();
+    shipments.forEach((shipment, i) => {
+      seen.add(shipment.id);
+      const lngLat: [number, number] = [
+        shipment.live.position.lng,
+        shipment.live.position.lat,
+      ];
+      const existing = markers.get(shipment.id);
+      if (existing) {
+        existing.setLngLat(lngLat);
+        existing.getElement().innerHTML = vehicleMarkerHtml(shipment, i);
+      } else {
+        const el = document.createElement("div");
+        el.setAttribute("data-testid", `vehicle-${shipment.id}`);
+        el.title = `${shipment.vehicle_name} — ${tourColor(i)}`;
+        el.style.transition = "transform 1.4s linear"; // poll/WS aralığında süzülme
+        el.innerHTML = vehicleMarkerHtml(shipment, i);
+        markers.set(
+          shipment.id,
+          new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map),
+        );
+      }
+    });
+    for (const [id, marker] of markers) {
+      if (!seen.has(id)) {
+        marker.remove();
+        markers.delete(id);
+      }
+    }
+  }, [mapReady, shipments]);
+
+  useEffect(
+    () => () => {
+      vehicleMarkersRef.current.forEach((m) => m.remove());
+      vehicleMarkersRef.current.clear();
+    },
+    [],
+  );
+
   // Occupancy-colored, stock-scaled warehouse markers.
   useEffect(() => {
     const map = mapRef.current;
@@ -176,11 +258,20 @@ export function GisMap({ warehouses }: GisMapProps) {
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = warehouses.map((wh) => {
       const { color, sizePx } = markerStyle(wh);
+      const closed = scenarioClosedIds.includes(wh.id);
       const el = document.createElement("button");
       el.setAttribute("aria-label", wh.name);
       el.setAttribute("data-testid", `wh-marker-${wh.id}`);
       el.style.cssText = `width:${sizePx}px;height:${sizePx}px;border-radius:8px;border:2px solid ${color};background:#131a2acc;color:${color};display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:${Math.round(sizePx * 0.5)}px;box-shadow:0 2px 10px rgba(0,0,0,.55);backdrop-filter:blur(2px)`;
-      el.textContent = "▣";
+      if (closed) {
+        // what-if: kapalı sayılan depo soluk + üstü çizili görünür
+        el.style.opacity = "0.35";
+        el.style.filter = "grayscale(1)";
+        el.textContent = "✕";
+        el.title = `${wh.name} — senaryoda kapalı`;
+      } else {
+        el.textContent = "▣";
+      }
       el.addEventListener("click", (ev) => {
         ev.stopPropagation();
         dispatch(warehouseSelected(wh.id));
@@ -195,7 +286,7 @@ export function GisMap({ warehouses }: GisMapProps) {
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
     };
-  }, [warehouses, dispatch]);
+  }, [warehouses, dispatch, scenarioClosedIds]);
 
   // Popup anchoring: project the selected warehouse, re-anchor on map move.
   useEffect(() => {
