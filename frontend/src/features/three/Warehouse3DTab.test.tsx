@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { Warehouse3DTab } from "@/features/three/Warehouse3DTab";
 import { DetailPanel } from "@/features/three/DetailPanel";
-import { binSelected } from "@/features/three/selectionSlice";
+import { alertBinSelected, binSelected } from "@/features/three/selectionSlice";
 import { renderWithProviders } from "@/test/testUtils";
 import { server } from "@/test/mocks/server";
 
@@ -149,6 +149,27 @@ describe("DetailPanel", () => {
     expect(screen.getByText("Rulman 6204 2RS")).toBeInTheDocument();
     expect(screen.getByText(/30 adet/)).toBeInTheDocument();
     expect(screen.getByText(/30\/100/)).toBeInTheDocument();
+  });
+
+  it("uyarı pininden gelen seçimde düşük-stok rozetini gösterir", async () => {
+    const { store } = renderWithProviders(<DetailPanel />);
+    store.dispatch(
+      alertBinSelected({
+        binId: 101,
+        alert: { sku: "PLT-EUR", total: 5, threshold: 20, level: "critical" },
+      }),
+    );
+    // Uyarı rozeti: ürün + org geneli toplam/eşik + eylem çağrısı
+    expect(await screen.findByText("PLT-EUR")).toBeInTheDocument();
+    expect(screen.getByText(/kritik seviyede/)).toBeInTheDocument();
+    expect(screen.getByText(/5\/20/)).toBeInTheDocument();
+    expect(screen.getByText(/yeni sipariş verilmeli/)).toBeInTheDocument();
+
+    // Normal seçim rozeti temizler
+    store.dispatch(binSelected(101));
+    await waitFor(() =>
+      expect(screen.queryByText(/kritik seviyede/)).not.toBeInTheDocument(),
+    );
   });
 
   it("istek başarısız olursa sonsuz iskelet yerine hata + tekrar dene gösterir", async () => {

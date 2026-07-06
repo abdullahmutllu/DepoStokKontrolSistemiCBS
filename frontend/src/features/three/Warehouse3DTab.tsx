@@ -136,6 +136,7 @@ export function Warehouse3DTab({ warehouseId }: { warehouseId: number }) {
       <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-ink-600 bg-ink-850 px-3 py-2">
         <span className="flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wide text-text-muted">
           <Sparkles size={13} /> Yerleştirme önerisi
+          <InfoHint text="Bir ürün seç, 'Göz öner'e bas. Sistem o ürünü koymak için en uygun boş gözleri önerir (kapıya yakın, kolay erişilen) ve sahnede parlatır." />
         </span>
         <Select
           value={slotProductId ?? products.data?.items[0]?.id ?? ""}

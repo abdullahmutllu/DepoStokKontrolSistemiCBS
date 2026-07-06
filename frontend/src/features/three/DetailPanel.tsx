@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import { useLocationDetailQuery } from "@/api/endpoints/warehouses";
 import { useAppDispatch, useAppSelector } from "@/app/hooks";
 import { binSelected } from "@/features/three/selectionSlice";
@@ -13,12 +13,15 @@ import { apiErrorMessage } from "@/lib/apiError";
 export function DetailPanel() {
   const dispatch = useAppDispatch();
   const selectedId = useAppSelector((s) => s.selection.selectedId);
+  const alert = useAppSelector((s) => s.selection.selectedAlert);
   const { data, isLoading, isError, error, refetch } = useLocationDetailQuery(
     selectedId ?? 0,
     { skip: selectedId == null },
   );
 
   if (selectedId == null) return null;
+
+  const alertColor = alert?.level === "critical" ? "#e25c4a" : "#e0a93e";
 
   return (
     <div className="absolute right-3 top-3 z-10 w-72 rounded-md border border-ink-600 bg-ink-800/95 shadow-xl backdrop-blur">
@@ -34,6 +37,24 @@ export function DetailPanel() {
           <X size={14} />
         </button>
       </div>
+      {alert && (
+        <div
+          className="flex items-start gap-2 border-b border-ink-600 px-3 py-2"
+          style={{ backgroundColor: `${alertColor}18` }}
+        >
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" style={{ color: alertColor }} />
+          <p className="text-[12px] leading-snug text-text">
+            <span className="mono font-medium" style={{ color: alertColor }}>
+              {alert.sku}
+            </span>{" "}
+            {alert.level === "critical" ? "kritik seviyede" : "azalıyor"}: org geneli toplam{" "}
+            <span className="mono">
+              {alert.total}/{alert.threshold}
+            </span>
+            . Bu ürün için yeni sipariş verilmeli.
+          </p>
+        </div>
+      )}
       <div className="p-3">
         {isError ? (
           <div className="space-y-2">

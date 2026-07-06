@@ -516,12 +516,18 @@ export function buildLedStrips(bins: BinInstance[]): LedStrip[] {
 export interface AlertPin {
   /** bin id, or rack id for aggregated rack-top pins */
   refId: number;
+  /** tıklanınca seçilecek/detayı açılacak göz (raf pininde en kötü göz) */
+  binId: number;
   level: "critical" | "warning";
   /** pin tip (cone point) position; the badge floats above */
   tip: [number, number, number];
   scale: number;
   /** badge text, e.g. "PLT-EUR 5/20" or "2 UYARI" */
   label: string;
+  /** tıklamada detay panelinde gösterilecek düşük-stok bağlamı */
+  sku: string | null;
+  total: number | null;
+  threshold: number | null;
 }
 
 /** One pin above every bin whose stock is below (or near) its threshold. */
@@ -530,9 +536,13 @@ export function buildBinAlertPins(bins: BinInstance[]): AlertPin[] {
     .filter((b) => b.alert !== null)
     .map((b) => ({
       refId: b.id,
+      binId: b.id,
       level: b.alert!,
       tip: [b.center[0], b.center[1] + b.size[1] / 2 + 0.12, b.center[2]],
       scale: 1,
+      sku: b.alertSku,
+      total: b.alertTotal,
+      threshold: b.alertThreshold,
       label:
         b.alertSku && b.alertTotal != null && b.alertThreshold != null
           ? `${b.alertSku} · ${b.alertTotal}/${b.alertThreshold}`
@@ -550,21 +560,32 @@ export function buildRackAlertPins(bins: BinInstance[], racks: RackFrame[]): Ale
     const [cx, , cz] = rack.center;
     const [w, h, d] = rack.size;
     let worst: "critical" | "warning" | null = null;
+    let worstBin: BinInstance | null = null;
     let count = 0;
     for (const bin of bins) {
       if (bin.alert === null) continue;
       if (Math.abs(bin.center[0] - cx) > w / 2 + 0.05) continue;
       if (Math.abs(bin.center[2] - cz) > d / 2 + 0.05) continue;
       count += 1;
-      if (bin.alert === "critical") worst = "critical";
-      else if (worst === null) worst = "warning";
+      // en kötü (önce kritik) gözü tıklama hedefi olarak sakla
+      if (bin.alert === "critical" && worst !== "critical") {
+        worst = "critical";
+        worstBin = bin;
+      } else if (worst === null) {
+        worst = "warning";
+        worstBin = bin;
+      }
     }
-    if (worst) {
+    if (worst && worstBin) {
       pins.push({
         refId: rack.id,
+        binId: worstBin.id,
         level: worst,
         tip: [cx, rack.center[1] + h / 2 + 0.95, cz],
         scale: 1.6,
+        sku: worstBin.alertSku,
+        total: worstBin.alertTotal,
+        threshold: worstBin.alertThreshold,
         label: `${count} ${worst === "critical" ? "KRİTİK" : "UYARI"}`,
       });
     }

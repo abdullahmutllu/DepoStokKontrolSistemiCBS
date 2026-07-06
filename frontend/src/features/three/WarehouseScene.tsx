@@ -17,7 +17,7 @@ import { Bloom, EffectComposer, N8AO, SMAA } from "@react-three/postprocessing";
 import * as THREE from "three";
 import { easing } from "maath";
 import { useAppDispatch, useAppSelector } from "@/app/hooks";
-import { binSelected } from "@/features/three/selectionSlice";
+import { alertBinSelected, binSelected } from "@/features/three/selectionSlice";
 import {
   buildBinAlertPins,
   buildLedStrips,
@@ -508,8 +508,9 @@ const ALERT_COLORS = { critical: "#e25c4a", warning: "#e0a93e" } as const;
 const ALERT_TEXT = { critical: "#1a0d0b", warning: "#1c1508" } as const;
 
 /** One warning tag: down-pointing stem + camera-facing badge with the SKU and
- * stock/threshold numbers (or the aggregated count on rack pins). */
-function AlertPinTag({ pin }: { pin: AlertPin }) {
+ * stock/threshold numbers (or the aggregated count on rack pins). Tıklanınca
+ * ilgili göz seçilir → yandaki detay paneli açılır. */
+function AlertPinTag({ pin, onClick }: { pin: AlertPin; onClick: (pin: AlertPin) => void }) {
   const s = pin.scale;
   const color = ALERT_COLORS[pin.level];
   const fontSize = 0.15 * s;
@@ -517,6 +518,15 @@ function AlertPinTag({ pin }: { pin: AlertPin }) {
   const badgeW = pin.label.length * fontSize * 0.62 + 0.34 * s;
   const badgeH = 0.32 * s;
   const badgeY = 0.42 * s + badgeH / 2;
+
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    onClick(pin);
+  };
+  const setHover = (hovering: boolean) => (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    document.body.style.cursor = hovering ? "pointer" : "";
+  };
 
   return (
     <group position={pin.tip}>
@@ -526,12 +536,17 @@ function AlertPinTag({ pin }: { pin: AlertPin }) {
         <meshBasicMaterial color={color} toneMapped={false} />
       </mesh>
       <Billboard position={[0, badgeY, 0]}>
-        {/* koyu kontur + renkli rozet gövdesi */}
-        <mesh position={[0, 0, -0.012]}>
+        {/* koyu kontur + renkli rozet gövdesi — tıklama hedefi */}
+        <mesh
+          position={[0, 0, -0.012]}
+          onClick={handleClick}
+          onPointerOver={setHover(true)}
+          onPointerOut={setHover(false)}
+        >
           <planeGeometry args={[badgeW + 0.06 * s, badgeH + 0.06 * s]} />
           <meshBasicMaterial color="#0f1522" transparent opacity={0.9} />
         </mesh>
-        <mesh>
+        <mesh onClick={handleClick}>
           <planeGeometry args={[badgeW, badgeH]} />
           <meshBasicMaterial color={color} toneMapped={false} />
         </mesh>
@@ -568,6 +583,7 @@ function AlertPinTag({ pin }: { pin: AlertPin }) {
 /** Gentle bob so pins catch the eye; only animates while frames are already
  * being produced (interaction/convergence), so demand mode stays idle. */
 function AlertPins({ bins, racks }: { bins: BinInstance[]; racks: SceneModel["racks"] }) {
+  const dispatch = useAppDispatch();
   const groupRef = useRef<THREE.Group>(null);
   const pins = useMemo(
     () => [...buildBinAlertPins(bins), ...buildRackAlertPins(bins, racks)],
@@ -582,10 +598,23 @@ function AlertPins({ bins, racks }: { bins: BinInstance[]; racks: SceneModel["ra
 
   if (pins.length === 0) return null;
 
+  const openBin = (pin: AlertPin) => {
+    document.body.style.cursor = "";
+    dispatch(
+      alertBinSelected({
+        binId: pin.binId,
+        alert:
+          pin.sku && pin.total != null && pin.threshold != null
+            ? { sku: pin.sku, total: pin.total, threshold: pin.threshold, level: pin.level }
+            : null,
+      }),
+    );
+  };
+
   return (
     <group ref={groupRef}>
       {pins.map((pin) => (
-        <AlertPinTag key={`${pin.level}-${pin.refId}`} pin={pin} />
+        <AlertPinTag key={`${pin.level}-${pin.refId}`} pin={pin} onClick={openBin} />
       ))}
     </group>
   );

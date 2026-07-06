@@ -287,6 +287,11 @@ describe("stok uyarı pinleri", () => {
     const critical = pins.find((p) => p.refId === 101)!;
     expect(critical.level).toBe("critical");
     expect(critical.label).toBe("PLT-EUR · 5/20"); // rozet metni: ürün + sayı
+    // tıklama hedefi + detay bağlamı taşınır
+    expect(critical.binId).toBe(101);
+    expect(critical.sku).toBe("PLT-EUR");
+    expect(critical.total).toBe(5);
+    expect(critical.threshold).toBe(20);
     const bin = bins.find((b) => b.id === 101)!;
     expect(critical.tip[1]).toBeGreaterThan(bin.center[1] + bin.size[1] / 2);
     expect(pins.some((p) => p.refId === 102)).toBe(false); // alert'siz göz pin almaz
@@ -306,6 +311,9 @@ describe("stok uyarı pinleri", () => {
     expect(pins[0].level).toBe("critical"); // critical, warning'i ezer
     expect(pins[0].label).toBe("2 KRİTİK"); // raftaki alert'li göz sayısı
     expect(pins[0].scale).toBeGreaterThan(1);
+    // tıklanınca kritik gözü (101) hedefler, onun bağlamını taşır
+    expect(pins[0].binId).toBe(101);
+    expect(pins[0].sku).toBe("PLT-EUR");
     const rack = model.racks[0];
     expect(pins[0].tip[1]).toBeGreaterThan(rack.center[1] + rack.size[1] / 2);
   });
