@@ -85,6 +85,11 @@ class RackPlacement(BaseModel):
     bins_per_shelf: int = Field(ge=1, le=50)
     shelf_height: float = Field(default=1.5, gt=0, le=10)
     bin_capacity: int | None = Field(default=100, ge=1)
+    # Optional presentation metadata carried onto the rack node so the 2D
+    # builder and 3D scene can colour-code rack types. Validated loosely: a
+    # hex colour and a short type label; both persisted in the rack's meta.
+    color: str | None = Field(default=None, max_length=9)
+    rack_type: str | None = Field(default=None, max_length=40)
 
 
 class LayoutGenerateRequest(BaseModel):

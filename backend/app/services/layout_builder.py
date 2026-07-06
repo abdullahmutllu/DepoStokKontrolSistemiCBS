@@ -135,11 +135,19 @@ def generate_layout(
             rack_code = f"{aisle_code}-R{rack_offset}"
             rack_w = rack.w_cells * cell
             rack_d = rack.d_cells * cell
+            rack_meta: dict[str, str] | None = None
+            if rack.color or rack.rack_type:
+                rack_meta = {}
+                if rack.color:
+                    rack_meta["color"] = rack.color
+                if rack.rack_type:
+                    rack_meta["rack_type"] = rack.rack_type
             rack_loc = StorageLocation(
                 warehouse_id=warehouse.id,
                 parent_id=aisle.id,
                 type="rack",
                 code=rack_code,
+                label=rack.rack_type,
                 pos_x=rack.col * cell,
                 pos_y=rack.row * cell,
                 pos_z=0.0,
@@ -147,6 +155,7 @@ def generate_layout(
                 dim_d=rack_d,
                 dim_h=rack.shelf_count * rack.shelf_height,
                 rotation=rack.rotation,
+                meta=rack_meta,
             )
             db.add(rack_loc)
             db.flush()

@@ -175,6 +175,8 @@ export interface RackPlacement {
   bins_per_shelf: number;
   shelf_height: number;
   bin_capacity: number | null;
+  color?: string | null;
+  rack_type?: string | null;
 }
 
 export interface DxfRect {
