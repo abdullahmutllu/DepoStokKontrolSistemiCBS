@@ -4,6 +4,8 @@
 
 **Harita entegrasyonlu · 3B görselleştirmeli · AI destekli depo & stok yönetim sistemi**
 
+[![Canlı Demo](https://img.shields.io/badge/▶%20Canlı%20Demo-tarayıcıda%20aç-5e8bff?style=for-the-badge)](https://abdullahmutllu.github.io/DepoStokKontrolSistemiCBS/map)
+
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.118-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![PostGIS](https://img.shields.io/badge/PostgreSQL%20%2B%20PostGIS-16%20%2F%203.5-336791?logo=postgresql&logoColor=white)](https://postgis.net)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
