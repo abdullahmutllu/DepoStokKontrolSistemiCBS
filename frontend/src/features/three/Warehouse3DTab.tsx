@@ -66,6 +66,7 @@ export function Warehouse3DTab({ warehouseId }: { warehouseId: number }) {
 
   const model = useMemo(() => (data ? buildSceneModel(data) : null), [data]);
   const presets = useMemo(() => (model ? cameraPresets(model.floor) : []), [model]);
+  const activeRoute = pickRoute?.routes.find((r) => r.policy === policy) ?? null;
 
   // Leaving the tab clears spatial selection state.
   useEffect(() => () => void dispatch(highlightsCleared()), [dispatch]);
@@ -195,7 +196,7 @@ export function Warehouse3DTab({ warehouseId }: { warehouseId: number }) {
           onPresetArrived={() => setPresetRequest(null)}
           viewMode={viewMode}
           colorMode={colorMode}
-          route={pickRoute?.routes.find((r) => r.policy === policy) ?? null}
+          route={activeRoute}
           walkMode={walkMode}
           onWalkExit={() => {
             setWalkMode(false);
@@ -219,6 +220,28 @@ export function Warehouse3DTab({ warehouseId }: { warehouseId: number }) {
           </button>
         )}
         <DetailPanel />
+        {/* Aktif toplama rotası açıklaması — beacon renklerini anlatır */}
+        {activeRoute && (
+          <div className="pointer-events-none absolute left-1/2 top-12 z-10 -translate-x-1/2 rounded-md border border-ink-600 bg-ink-900/90 px-3 py-1.5 text-[11.5px] backdrop-blur">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+              <span className="font-medium text-accent-glow">
+                Toplama rotası · {activeRoute.stops.length} durak · {activeRoute.total_m.toLocaleString("tr-TR")} m
+              </span>
+              <span className="flex items-center gap-1.5 text-text-muted">
+                <span className="inline-block size-2.5 rounded-full" style={{ backgroundColor: "#3fb970" }} />
+                kapı (başla/bitiş)
+              </span>
+              <span className="flex items-center gap-1.5 text-text-muted">
+                <span className="inline-block size-2.5 rounded-full" style={{ backgroundColor: "#5e8bff" }} />
+                numaralı toplama sırası
+              </span>
+              <span className="flex items-center gap-1.5 text-text-muted">
+                <span className="inline-block size-2.5 rounded-full" style={{ backgroundColor: "#e0a93e" }} />
+                son durak
+              </span>
+            </div>
+          </div>
+        )}
         {/* Camera presets + view mode */}
         <div className="absolute left-3 top-3 flex items-center gap-2">
           <div className="flex gap-0.5 rounded border border-ink-600 bg-ink-900/90 p-0.5 backdrop-blur">

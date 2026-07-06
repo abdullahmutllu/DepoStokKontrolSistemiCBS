@@ -762,11 +762,82 @@ function WalkController({
   );
 }
 
-/* ── Pick route: animated dashed line + numbered stop markers ─────────────── */
+/* ── Pick route: bright animated path + numbered beacons above the racks ───── */
+
+/** A stop marker: floor ring + glowing beam so it reads above racks, and a
+ * camera-facing badge (number for picks, plain disc for the depot). */
+function StopBeacon({
+  x,
+  z,
+  order,
+  color,
+  label,
+  height = 2.2,
+}: {
+  x: number;
+  z: number;
+  order?: number;
+  color: string;
+  label?: string;
+  height?: number;
+}) {
+  return (
+    <group position={[x, 0, z]}>
+      {/* floor ring pins the exact göz */}
+      <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.34, 0.52, 40]} />
+        <meshBasicMaterial color={color} transparent opacity={0.6} depthWrite={false} toneMapped={false} />
+      </mesh>
+      {/* glowing vertical beam — visible from above even behind tall racks */}
+      <mesh position={[0, height / 2, 0]}>
+        <cylinderGeometry args={[0.05, 0.05, height, 8]} />
+        <meshBasicMaterial color={color} transparent opacity={0.55} depthWrite={false} toneMapped={false} />
+      </mesh>
+      {/* badge always faces the camera */}
+      <Billboard position={[0, height, 0]}>
+        <mesh>
+          <circleGeometry args={[0.42, 40]} />
+          <meshBasicMaterial color={color} toneMapped={false} />
+        </mesh>
+        <mesh position={[0, 0, 0.002]}>
+          <ringGeometry args={[0.42, 0.5, 40]} />
+          <meshBasicMaterial color="#0f1522" toneMapped={false} />
+        </mesh>
+        {order != null && (
+          <Text
+            position={[0, 0, 0.01]}
+            fontSize={0.4}
+            color="#ffffff"
+            anchorX="center"
+            anchorY="middle"
+            outlineWidth={0.02}
+            outlineColor="#0f1522"
+          >
+            {String(order)}
+          </Text>
+        )}
+      </Billboard>
+      {label != null && (
+        <Billboard position={[0, height + 0.62, 0]}>
+          <Text
+            fontSize={0.28}
+            color={color}
+            anchorX="center"
+            anchorY="middle"
+            outlineWidth={0.025}
+            outlineColor="#0f1522"
+          >
+            {label}
+          </Text>
+        </Billboard>
+      )}
+    </group>
+  );
+}
 
 function RouteOverlay({ route }: { route: PolicyRoute | null }) {
   const { invalidate } = useThree();
-  const matRef = useRef<{ dashOffset: number } | null>(null);
+  const flowRef = useRef<{ dashOffset: number } | null>(null);
   const startRef = useRef(0);
 
   useEffect(() => {
@@ -778,62 +849,59 @@ function RouteOverlay({ route }: { route: PolicyRoute | null }) {
   useFrame(() => {
     if (!route) return;
     const elapsed = (performance.now() - startRef.current) / 1000;
-    if (matRef.current) matRef.current.dashOffset = -elapsed * 1.6;
-    // Animate ~8s after each route change, then settle back to demand mode.
-    if (elapsed < 8) invalidate();
+    // Dashes crawl forward along the path → shows travel direction.
+    if (flowRef.current) flowRef.current.dashOffset = -elapsed * 2.2;
+    // Keep animating ~12s after each route change, then settle to demand mode.
+    if (elapsed < 12) invalidate();
   });
 
   const points = useMemo(
     () =>
       route
-        ? route.path.map((p) => [p.x, 0.07, p.y] as [number, number, number])
+        ? route.path.map((p) => [p.x, 0.1, p.y] as [number, number, number])
         : [],
     [route],
   );
 
   if (!route || points.length < 2) return null;
+  const depot = route.path[0];
+  const lastOrder = route.stops.length;
   return (
     <group>
       <Suspense fallback={null}>
         <RouteForklift path={route.path} />
       </Suspense>
+      {/* soft wide glow underlay */}
+      <Line points={points} color="#3f6fd8" lineWidth={9} transparent opacity={0.3} />
+      {/* bright solid core */}
+      <Line points={points} color="#8fb4ff" lineWidth={3.5} />
+      {/* animated flow dashes travelling toward the goal */}
       <Line
         points={points}
-        color="#9dc1ff"
-        lineWidth={2.5}
+        color="#eaf1ff"
+        lineWidth={4}
         dashed
-        dashSize={0.55}
-        gapSize={0.3}
+        dashSize={0.85}
+        gapSize={2.3}
+        transparent
+        opacity={0.95}
         ref={(line: unknown) => {
           const l = line as { material?: { dashOffset: number } } | null;
-          matRef.current = l?.material ?? null;
+          flowRef.current = l?.material ?? null;
         }}
       />
-      {route.stops.map((stop, i) => (
-        <group key={stop.location_id} position={[stop.x, 0, stop.y]}>
-          <mesh position={[0, 0.32, 0]}>
-            <sphereGeometry args={[i === 0 ? 0.22 : 0.16, 16, 16]} />
-            <meshBasicMaterial
-              color={i === 0 ? "#9dc1ff" : "#5e8bff"}
-              toneMapped={false}
-            />
-          </mesh>
-          <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[0.3, 0.42, 24]} />
-            <meshBasicMaterial color="#9dc1ff" transparent opacity={0.5} depthWrite={false} />
-          </mesh>
-          <Text
-            position={[0, 0.95, 0]}
-            fontSize={0.42}
-            color="#e8ecf6"
-            outlineWidth={0.03}
-            outlineColor="#0f1522"
-            anchorX="center"
-            anchorY="middle"
-          >
-            {String(stop.order)}
-          </Text>
-        </group>
+      {/* depot / kapı: picking starts and ends here */}
+      <StopBeacon x={depot.x} z={depot.y} color="#3fb970" label="KAPI · başla / bitiş" height={1.7} />
+      {/* numbered pick stops; last one flagged amber */}
+      {route.stops.map((stop) => (
+        <StopBeacon
+          key={stop.location_id}
+          x={stop.x}
+          z={stop.y}
+          order={stop.order}
+          color={stop.order === lastOrder ? "#e0a93e" : "#5e8bff"}
+          label={stop.order === lastOrder ? "son toplama" : undefined}
+        />
       ))}
     </group>
   );
