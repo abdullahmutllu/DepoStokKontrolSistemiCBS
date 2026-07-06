@@ -8,7 +8,7 @@
 [![PostGIS](https://img.shields.io/badge/PostgreSQL%20%2B%20PostGIS-16%20%2F%203.5-336791?logo=postgresql&logoColor=white)](https://postgis.net)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![three.js](https://img.shields.io/badge/three.js-r3f%209-000000?logo=threedotjs&logoColor=white)](https://docs.pmnd.rs/react-three-fiber)
-[![Tests](https://img.shields.io/badge/tests-166%20passing-3fb970)](#-testler)
+[![Tests](https://img.shields.io/badge/tests-233%20passing-3fb970)](#-testler)
 [![License: MIT](https://img.shields.io/badge/license-MIT-5e8bff)](LICENSE)
 
 *Excel'in göstermediği şeyi gösterir: **stoğunuzun fiziksel yerini.***
@@ -19,7 +19,7 @@
 
 ### 🇬🇧 English summary
 
-**Depo Konsolu** is a multi-warehouse inventory management system for SMEs that treats *space* as a first-class citizen: warehouses live on a real map (MapLibre + PostGIS), a full **GIS workspace** lets you draw regions and get instant spatial analytics, and every rack is rendered in an **industrial-grade 3D scene** (react-three-fiber) where bin colors and fill heights encode live occupancy. On top of that: a **supply-chain network layer** (demand heatmap, center-of-gravity site suggestion, Voronoi service territories, drive-time coverage via OpenRouteService with an offline fallback), a **digital-twin realistic mode** (CC0 GLTF pallets & cartons, HDRI lighting, N8AO), **stock-alert pins** floating over low-stock bins, and an **order-picking route optimizer** (S-shape / largest-gap / greedy+2-opt) animated on the warehouse floor. An **AI layer** (OpenRouter) translates natural-language questions into safe, whitelisted, org-scoped queries — the model never touches SQL. Fully synchronous FastAPI backend, React 19 frontend, 166 tests, one-command Docker startup. The UI is Turkish; the docs below follow in Turkish.
+**Depo Konsolu** is a multi-warehouse inventory management system for SMEs that treats *space* as a first-class citizen: warehouses live on a real map (MapLibre + PostGIS), a full **GIS workspace** lets you draw regions and get instant spatial analytics, and every rack is rendered in an **industrial-grade 3D scene** (react-three-fiber) where bin colors and fill heights encode live occupancy. On top of that: a **supply-chain network layer** (demand heatmap, center-of-gravity site suggestion, Voronoi service territories, drive-time coverage via OpenRouteService with an offline fallback), a **digital-twin realistic mode** (CC0 GLTF pallets & cartons, HDRI lighting, N8AO), **stock-alert pins** floating over low-stock bins, and an **order-picking route optimizer** (S-shape / largest-gap / greedy+2-opt) animated on the warehouse floor. And a full **logistics layer**: capacitated **vehicle routing** (Clarke-Wright + 2-opt), **live fleet tracking** where trucks move on the map in real time with per-stop ETAs (WebSocket push, REST-polling fallback), a **what-if scenario** planner (close a warehouse, see the network re-balance), **demand forecasting** (Holt double-exponential) with reorder points, **order + wave picking**, a **KPI dashboard**, and camera **barcode scanning**. An **AI layer** (OpenRouter) translates natural-language questions into safe, whitelisted, org-scoped queries — the model never touches SQL. Fully synchronous FastAPI backend, React 19 frontend, 233 tests, one-command Docker startup, plus a **serverless live demo** that runs the entire API in the browser via MSW. The UI is Turkish; the docs below follow in Turkish.
 
 ---
 
@@ -112,6 +112,52 @@ duraklarla çizilir. Optimum referansı: Ratliff–Rosenthal (1983).
 
 ![Toplama rotası — üstten](docs/media/pick-route.png)
 
+### 🚚 Canlı Araç Takibi + Teslimat Rotalama
+
+Depoya atanmış müşteriler için **kapasiteli araç rotalama** (Clarke-Wright savings + 2-opt):
+depo/araç sayısı/kapasite seçin, turlar renkli çizgilerle haritaya düşsün. "Sevkiyatı
+başlat" deyince araçlar **gerçek zamanlı** yola çıkar — konumları haritada sürekli güncellenir,
+oklar kerterize döner, her araç kartında **durum, ilerleme %, sıradaki durak ve tahmini
+varış (ETA)** görünür.
+
+Takip mimarisi durumsuz: araç konumu saklanmaz, `konum = f(plan, geçen_süre)` ile her
+istekte deterministik hesaplanır. Backend bunu **WebSocket** ile 2 saniyede bir push'lar
+(SignalR muadili, JWT'li); soket kurulamazsa istemci **REST polling'e** düşer. Aynı motor
+tarayıcı-içi demoda TypeScript olarak koşar — canlı demo sunucusuz da araçları hareket ettirir.
+
+![Canlı araç takibi demosu](docs/media/demo-tracking.gif)
+
+![Canlı filo — harita üzerinde araçlar](docs/media/live-tracking.png)
+
+### 🔀 What-if Senaryosu — depo kapat, ağı yeniden gör
+
+Bir ya da daha çok depoyu "kapalı" işaretleyin: müşteriler anında en yakın açık depoya
+yeniden atanır, **toplam ağırlıklı taşıma mesafesi**, ortalama mesafe ve kapsama nasıl
+değişir kartta belirir (% fark, yeniden atanan müşteri sayısı, kapsama dışı değişimi).
+Kapalı depolar haritada soluklaşıp üstü çizilir. Ağ tasarımı araçlarının (anyLogistix,
+Coupa) çekirdek sorusu.
+
+![What-if senaryosu](docs/media/scenario.png)
+
+### 📈 Talep Tahmini + Yeniden Sipariş
+
+Her ürünün son 30 günlük çıkışından **Holt çift üstel düzeltme** ile 14 günlük tahmin
+eğrisi; ortalama talep, standart sapma ve güvenlik stoklu **yeniden sipariş noktası (ROP)**.
+"Ne zaman biter?" sorusuna gün cinsinden yanıt + order-up-to politikasıyla önerilen sipariş
+miktarı. Genel Bakış'a operasyonun nabzını tutan **KPI şeridi** (stok devir hızı, giriş/çıkış,
+hareket/gün, açık sipariş, aktif sevkiyat) eklendi.
+
+![Talep tahmini + reorder](docs/media/forecast.png)
+
+### 📥 Sipariş + Dalga Toplama · Barkod
+
+Müşteri siparişleri oluşturun, birden çoğunu **tek dalgada** birleştirin: kalemler ürün
+bazında toplanır, gözlere çözülür ve mevcut rota çözücüyle optimize edilip **yazdırılabilir
+toplama listesi** olarak çıkar. Stok işlemlerinde **kamerayla barkod okuma** (tarayıcı
+yerlisi BarcodeDetector API) ile SKU'yu okutup ürün seçin.
+
+![Sipariş + dalga toplama](docs/media/orders-wave.png)
+
 ### 📦 Stok Operasyonları + Tam Denetim İzi
 
 Mal kabul / toplama / transfer / sayım — hepsi tek transaction, satır kilitli
@@ -162,10 +208,11 @@ flowchart LR
     end
 
     subgraph Backend["FastAPI (sync)"]
-        API[REST /api/v1\nJWT + org izolasyonu]
+        API[REST /api/v1 + WS\nJWT + org izolasyonu]
         STOCK[Stok Servisi\nkilitli & atomik]
         GEO[Geo Analiz\nST_Covers · ST_Area · ST_Distance]
-        NET[Ağ Analizi\nCoG · Voronoi · kapsama · rota]
+        NET[Ağ Analizi\nCoG · Voronoi · kapsama]
+        LOG[Lojistik\nVRP · canlı takip · tahmin]
         AI[AI Katmanı\nbeyaz-listeli sorgu derleyici]
         SCHED[APScheduler\ndüşük stok kontrolü]
     end
@@ -176,14 +223,18 @@ flowchart LR
     SMTP[SMTP / konsol]
 
     RTK -->|JSON| API
-    API --> STOCK & GEO & NET & AI
-    STOCK & GEO & NET --> DB
+    RTK -.->|"WebSocket · canlı konum"| API
+    API --> STOCK & GEO & NET & LOG & AI
+    STOCK & GEO & NET & LOG --> DB
     NET -.->|"anahtar varsa"| ORS
     AI -->|"kısıtlı JSON şema"| OR
     AI --> DB
     SCHED --> DB
     SCHED --> SMTP
 ```
+
+Saf, test edilebilir çekirdekler (`services/vrp.py`, `tracking.py`, `forecast.py`) db/FastAPI'den
+bağımsızdır; aynı algoritmalar tarayıcı-içi demoda TypeScript olarak birebir çalışır.
 
 **İki koordinat sistemi, bilinçli ayrım:** depo *konumu* WGS84/PostGIS (harita);
 depo *içi* metre cinsinden düz kartezyen x/y/z (builder + 3B). İkisi hiç karışmaz.
@@ -243,8 +294,8 @@ npm run dev
 ## 🧪 Testler
 
 ```bash
-cd backend  && .venv\Scripts\python -m pytest      # 76 test
-cd frontend && npm test                            # 90 test
+cd backend  && .venv\Scripts\python -m pytest      # 119 test
+cd frontend && npm test                            # 114 test
 ```
 
 | Alan | Kanıtlanan |
@@ -252,12 +303,14 @@ cd frontend && npm test                            # 90 test
 | Org izolasyonu | B org'u A'nın verisine her uçta 404 alır — listelerde sızıntı yok |
 | Stok tutarlılığı | Negatif stok reddi, **transfer atomikliği** (ortada crash → hiçbir şey yazılmaz), tam audit |
 | AI güvenliği | Mock'lu: `DROP TABLE` içeren model çıktısı asla çalışmaz; alan beyaz listesi; limit → 429 |
-| Geo analiz | Poligon içi/dışı ayrımı, alan/mesafe büyüklükleri metre ölçeğinde doğrulanır |
-| Ağ analizi | Ağırlık merkezi bilinen dağılımda beklenen noktada; Voronoi bölge sayısı; kapsama bant istatistikleri; ORS mock'la isochrone + cache'in ikinci çağrıda API'ye gitmediği + anahtarsız halka fallback'i |
-| Toplama rotası | 2 koridorlu mini yerleşimde S-shape mesafesi elle hesapla birebir; optimize ≤ s-shape; boş sipariş 422 |
+| Geo/Ağ analizi | Poligon içi/dışı, alan/mesafe metre ölçeğinde; ağırlık merkezi beklenen noktada; Voronoi bölge sayısı; kapsama bantları; ORS mock + cache + anahtarsız halka fallback |
+| VRP + rota | Clarke-Wright tek araç TSP sırası elle doğrulanmış; kapasite bölünmesi; her rotada yük ≤ kapasite; 2-opt çapraz kenar düzeltir; S-shape mesafesi birebir |
+| Canlı takip | Durumsuz motor: t=0 depot, bacak ortası interpolasyon, servis penceresinde at_stop, bitişte completed; ETA/kerteriz elle hesapla; **WebSocket kare push'lar + kötü token 4401** |
+| What-if | Depo kapatınca ağırlıklı mesafe artar, yeniden atanan müşteri sayısı doğru, hepsini kapatma 422 |
+| Tahmin | Holt sabit seride sabit, artan trendde monoton; ROP elle hesapla birebir; stok bitiş günü; reorder önerisi |
+| Sipariş/dalga | Ürün birleştirme (5+3=8), göze çözme + rota; tek-depo kısıtı 422; org izolasyonu |
 | Uyarı pinleri | Eşik altı → critical, 1.5× eşik altı → warning; pin konumları göz/raf üstünde (saf kurucular) |
-| Builder & DXF | Kod benzersizliği, pos/dim tutarlılığı, mm→m ölçekleme, bozuk dosya hataları |
-| Frontend | Login, harita-tıklamalı depo oluşturma, builder, göz paneli, arama vurgusu, bölge analizi, ağ katmanları/CoG kartı, politika çipleri, ABC lejantı |
+| Frontend | Login, depo/builder/göz paneli, ağ katmanları/CoG, canlı filo kartları, senaryo kartı, tahmin grafiği, sipariş dalgası, KPI şeridi, barkod fallback, WASD yürüyüş overlay'i |
 
 ## Notlar
 
@@ -270,6 +323,14 @@ cd frontend && npm test                            # 90 test
   künyeleri için [docs/ASSETS-CREDITS.md](docs/ASSETS-CREDITS.md). Forklift CC-BY 3.0
   (KolosStudios), gerisi CC0.
 - Zayıf GPU'da 3B sekmesine `?lite` ekleyin — post-processing kapanır, sahne aynı kalır.
+- **Canlı araç takibi** WebSocket ile push'lanır; Docker'da nginx `/api/` WS upgrade'i
+  geçirir. Takip **hızlandırılmış simülasyondur** (varsayılan 30× — 1 gerçek dakika = 30
+  sim dakikası), gerçek GPS değil; amaç mekanizmayı demoda görünür kılmak.
+- **Barkod okuma** tarayıcı yerlisi `BarcodeDetector` API'sine yaslanır (Chrome/Edge); harici
+  WASM çözücü paketlenmez, desteklenmeyen tarayıcıda dürüst bir mesaj gösterilir.
+- **Canlı demo** (`abdullahmutllu.github.io/DepoStokKontrolSistemiCBS`) tüm API'yi MSW ile
+  tarayıcıda koşturur — canlı araç takibi dahil her şey sunucusuz çalışır (soket yerine 3 sn
+  REST polling). Veriler sekmede tutulur, yenileyince sıfırlanır.
 
 ## Lisans
 
