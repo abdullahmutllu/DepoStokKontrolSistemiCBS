@@ -2,6 +2,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.warehouse import LatLng, LevelOut
+
 LocationType = Literal["zone", "aisle", "rack", "shelf", "bin"]
 
 
@@ -11,6 +13,7 @@ class LocationOut(BaseModel):
     id: int
     warehouse_id: int
     parent_id: int | None
+    level_id: int | None = None
     type: str
     code: str
     label: str | None
@@ -43,6 +46,7 @@ class Bin3DOut(BaseModel):
 
     id: int
     code: str
+    level_id: int | None = None
     pos_x: float
     pos_y: float
     pos_z: float
@@ -66,6 +70,11 @@ class Layout3DOut(BaseModel):
     warehouse_id: int
     local_width: float
     local_depth: float
+    # Georeference: grid-north deviation, so the client can project the interior
+    # onto the map at its true orientation.
+    bearing_deg: float = 0.0
+    location: LatLng | None = None  # warehouse center (local-frame origin)
+    levels: list[LevelOut] = []
     zones: list[LocationOut]
     aisles: list[LocationOut]
     racks: list[LocationOut]

@@ -25,6 +25,11 @@ class StorageLocation(Base):
     parent_id: Mapped[int | None] = mapped_column(
         ForeignKey("storage_locations.id", ondelete="CASCADE")
     )
+    # Building storey this node sits on. Nullable = legacy single-level data
+    # (treated as ground floor / ordinal 0 by clients).
+    level_id: Mapped[int | None] = mapped_column(
+        ForeignKey("levels.id", ondelete="SET NULL"), index=True
+    )
     type: Mapped[str] = mapped_column(String(10))  # zone | aisle | rack | shelf | bin
     code: Mapped[str] = mapped_column(String(50))
     label: Mapped[str | None] = mapped_column(String(200))

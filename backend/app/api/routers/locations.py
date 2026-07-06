@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.models import Product, StockItem, StockMovement, StorageLocation, User
+from app.models import Level, Product, StockItem, StockMovement, StorageLocation, User
 from app.schemas.location import (
     Bin3DOut,
     BinStockOut,
@@ -14,6 +14,8 @@ from app.schemas.location import (
     LocationDetailOut,
     LocationOut,
 )
+from app.schemas.warehouse import LevelOut
+from app.services import geo
 from app.services.scoping import get_owned_location, get_owned_warehouse
 
 router = APIRouter(tags=["locations"])
@@ -143,6 +145,7 @@ def layout_3d(
                     dim_h=loc.dim_h,
                     rotation=loc.rotation,
                     capacity=loc.capacity,
+                    level_id=loc.level_id,
                     quantity=quantities.get(loc.id, 0),
                     movement_count=movement_counts.get(loc.id, 0),
                     alert=alerts[loc.id][0] if loc.id in alerts else None,
@@ -152,10 +155,17 @@ def layout_3d(
                 )
             )
 
+    levels = db.scalars(
+        select(Level).where(Level.warehouse_id == warehouse.id).order_by(Level.ordinal)
+    ).all()
+
     return Layout3DOut(
         warehouse_id=warehouse.id,
         local_width=warehouse.local_width,
         local_depth=warehouse.local_depth,
+        bearing_deg=warehouse.bearing_deg,
+        location=geo.point_to_latlng(warehouse.location),
+        levels=[LevelOut.model_validate(lv) for lv in levels],
         zones=zones,
         aisles=aisles,
         racks=racks,

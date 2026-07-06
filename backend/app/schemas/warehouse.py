@@ -14,6 +14,7 @@ class WarehouseCreate(BaseModel):
     location: LatLng
     local_width: float = Field(default=50.0, gt=0, le=2000)
     local_depth: float = Field(default=30.0, gt=0, le=2000)
+    bearing_deg: float = Field(default=0.0, ge=-360, le=360)
 
 
 class WarehouseUpdate(BaseModel):
@@ -22,6 +23,16 @@ class WarehouseUpdate(BaseModel):
     location: LatLng | None = None
     local_width: float | None = Field(default=None, gt=0, le=2000)
     local_depth: float | None = Field(default=None, gt=0, le=2000)
+    bearing_deg: float | None = Field(default=None, ge=-360, le=360)
+
+
+class LevelOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ordinal: int
+    name: str
+    base_elevation_m: float
 
 
 class WarehouseOut(BaseModel):
@@ -34,6 +45,9 @@ class WarehouseOut(BaseModel):
     footprint: list[LatLng] | None = None
     local_width: float
     local_depth: float
+    # Grid-north's clockwise deviation from true north — georeferences the
+    # interior meter frame onto the map at its real orientation.
+    bearing_deg: float = 0.0
     created_at: datetime
 
 

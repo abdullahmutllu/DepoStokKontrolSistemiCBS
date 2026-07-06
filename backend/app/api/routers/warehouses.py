@@ -21,6 +21,7 @@ def _to_out(wh: Warehouse) -> WarehouseOut:
         footprint=geo.polygon_to_ring(wh.footprint),
         local_width=wh.local_width,
         local_depth=wh.local_depth,
+        bearing_deg=wh.bearing_deg,
         created_at=wh.created_at,
     )
 

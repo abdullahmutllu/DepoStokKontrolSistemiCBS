@@ -16,6 +16,13 @@ export interface LatLng {
   lng: number;
 }
 
+export interface Level {
+  id: number;
+  ordinal: number;
+  name: string;
+  base_elevation_m: number;
+}
+
 export interface Warehouse {
   id: number;
   name: string;
@@ -24,6 +31,8 @@ export interface Warehouse {
   footprint: LatLng[] | null;
   local_width: number;
   local_depth: number;
+  /** Grid-kuzeyin gerçek kuzeyden saat yönü sapması (georeferans). */
+  bearing_deg?: number;
   created_at: string;
   location_count?: number;
   bin_count?: number;
@@ -38,6 +47,7 @@ export interface StorageLocation {
   id: number;
   warehouse_id: number;
   parent_id: number | null;
+  level_id?: number | null;
   type: LocationType;
   code: string;
   label: string | null;
@@ -68,6 +78,7 @@ export interface LocationDetail extends StorageLocation {
 export interface Bin3D {
   id: number;
   code: string;
+  level_id?: number | null;
   pos_x: number;
   pos_y: number;
   pos_z: number;
@@ -91,6 +102,9 @@ export interface Layout3D {
   warehouse_id: number;
   local_width: number;
   local_depth: number;
+  bearing_deg?: number;
+  location?: LatLng | null;
+  levels?: Level[];
   zones: StorageLocation[];
   aisles: StorageLocation[];
   racks: StorageLocation[];

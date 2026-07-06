@@ -18,6 +18,9 @@ class Warehouse(Base):
     footprint = mapped_column(Geography(geometry_type="POLYGON", srid=4326), nullable=True)
     local_width: Mapped[float] = mapped_column(Float, default=50.0)  # meters (x axis)
     local_depth: Mapped[float] = mapped_column(Float, default=30.0)  # meters (y axis)
+    # Grid-north's clockwise deviation from true north (degrees). Lets the
+    # local meter frame be georeferenced onto the map at the real orientation.
+    bearing_deg: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
