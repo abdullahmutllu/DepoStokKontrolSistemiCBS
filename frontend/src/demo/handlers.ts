@@ -91,9 +91,16 @@ function planOf(s: DemoShipment) {
   );
 }
 
+function elapsedOf(s: DemoShipment, totalMin: number): number {
+  const raw = ((Date.now() - s.depart_at_ms) / 60000) * s.time_scale;
+  // döngüsel demo aracı: plan bitince başa sar
+  if (s.loop && totalMin > 0 && raw >= 0) return raw % totalMin;
+  return Math.max(-1, raw);
+}
+
 function shipmentOut(s: DemoShipment) {
   const plan = planOf(s);
-  const elapsed = Math.max(-1, ((Date.now() - s.depart_at_ms) / 60000) * s.time_scale);
+  const elapsed = elapsedOf(s, plan.totalMin);
   const live = positionAt(plan, elapsed);
   const route = [s.depot, ...s.stops.map((st) => ({ lat: st.lat, lng: st.lng })), s.depot];
   return {
@@ -899,7 +906,7 @@ export const handlers = [
     const s = shipments.find((x) => x.id === Number(params.id));
     if (!s) return err(404, "NOT_FOUND", "Sevkiyat bulunamadı");
     const plan = planOf(s);
-    const elapsed = Math.max(-1, ((Date.now() - s.depart_at_ms) / 60000) * s.time_scale);
+    const elapsed = elapsedOf(s, plan.totalMin);
     const stops = s.stops.map((st, idx) => {
       const arrive = plan.legs[idx].cumArriveMin;
       const depart = arrive + st.service_min;

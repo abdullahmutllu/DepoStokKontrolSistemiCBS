@@ -472,11 +472,51 @@ export interface DemoShipment {
   total_km: number;
   total_min: number;
   depart_at_ms: number;
+  /** loop=true: plan bitince başa sarar — demo aracı hep hareket eder. */
+  loop?: boolean;
 }
 
 export const shipments: DemoShipment[] = [];
 let shipmentIdSeq = 0;
 export const nextShipmentId = () => ++shipmentIdSeq;
+
+/** Modül yüklenince (demo açılışı) her depodan hep-hareket eden bir araç
+ * seed'lenir → ziyaretçi hiç tıklamadan haritada 3 canlı kamyon görür. */
+export function seedDemoShipments(buildStops: (whId: number, depot: LatLng, custs: typeof customers) => DemoShipment | null) {
+  if (shipments.length > 0) return;
+  const whPts = new Map(warehouses.map((w) => [w.id, w.location]));
+  const assigned = new Map<number, typeof customers>();
+  for (const w of warehouses) assigned.set(w.id, []);
+  for (const c of customers) {
+    const near = warehouses.reduce((b, w) =>
+      hav(c.location, whPts.get(w.id)!) < hav(c.location, whPts.get(b.id)!) ? w : b,
+    );
+    assigned.get(near.id)!.push(c);
+  }
+  const top = [...warehouses].sort((a, b) => assigned.get(b.id)!.length - assigned.get(a.id)!.length).slice(0, 3);
+  const now = Date.now();
+  top.forEach((w, i) => {
+    const custs = assigned.get(w.id)!;
+    if (custs.length < 2) return;
+    const s = buildStops(w.id, whPts.get(w.id)!, custs);
+    if (!s) return;
+    s.id = nextShipmentId();
+    s.vehicle_name = `Araç ${i + 1}`;
+    s.loop = true;
+    s.depart_at_ms = now;
+    shipments.push(s);
+  });
+}
+
+function hav(a: LatLng, b: LatLng): number {
+  const R = 6371;
+  const la1 = (a.lat * Math.PI) / 180;
+  const la2 = (b.lat * Math.PI) / 180;
+  const dLat = la2 - la1;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
 
 export interface DemoOrderLine {
   product_id: number;

@@ -3,6 +3,7 @@ import { useWarehousesQuery } from "@/api/endpoints/warehouses";
 import { GisMap } from "@/features/map/GisMap";
 import { MapToolbar } from "@/features/map/MapToolbar";
 import { AnalysisPanel } from "@/features/map/AnalysisPanel";
+import { useShipmentsLive } from "@/features/map/useShipmentsLive";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/shared/states";
 import { Button } from "@/components/ui/button";
 import { apiErrorMessage } from "@/lib/apiError";
@@ -10,6 +11,9 @@ import { apiErrorMessage } from "@/lib/apiError";
 /** Full-screen GIS workspace: tool rail + map + analysis panel. */
 export function MapWorkspacePage() {
   const { data, isLoading, isError, error, refetch } = useWarehousesQuery();
+  // Canlı sevkiyat aboneliği harita seviyesinde: hangi panel sekmesi açık
+  // olursa olsun (seed'lenmiş demo araçları dahil) araçlar haritada akar.
+  useShipmentsLive(true);
 
   if (isLoading) {
     return (

@@ -150,6 +150,26 @@ class TestShipments:
             with client.websocket_connect("/api/v1/shipments/ws?token=gecersiz") as ws:
                 ws.receive_json()
 
+    def test_loop_shipment_never_completes(self, client, auth_headers, network_env, db):
+        """Döngüsel demo aracı (loop=True) çok geçmişte yola çıkmış olsa bile
+        'completed' olmaz — plan başa sarar, hep hareket eder."""
+        from datetime import UTC, datetime, timedelta
+
+        from app.models import Shipment
+
+        _, user, ankara, _ = network_env
+        headers = auth_headers(user)
+        self._create(client, headers, ankara.id)
+        shipment = db.query(Shipment).first()
+        # 10 gün önce çıkmış say → normalde çoktan tamamlanmış olurdu
+        shipment.loop = True
+        shipment.depart_at = datetime.now(UTC) - timedelta(days=10)
+        db.commit()
+
+        active = client.get("/api/v1/shipments/active", headers=headers).json()
+        assert active[0]["live"]["status"] != "completed"
+        assert active[0]["live"]["progress_percent"] < 100
+
 
 class TestScenario:
     def test_closing_a_warehouse_worsens_weighted_distance(

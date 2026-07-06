@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -27,6 +27,8 @@ class Shipment(Base):
     time_scale: Mapped[float] = mapped_column(Float, default=30.0)
     total_km: Mapped[float] = mapped_column(Float)
     total_min: Mapped[float] = mapped_column(Float)
+    # loop=True: demo aracı — plan bitince başa sarar, sürekli hareket eder.
+    loop: Mapped[bool] = mapped_column(Boolean, default=False)
     depart_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

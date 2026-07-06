@@ -147,16 +147,17 @@ def _plan_of(shipment: Shipment):
     return build_plan(depot, stops, base_speed_kmh=shipment.base_speed_kmh)
 
 
-def _elapsed_sim_min(shipment: Shipment, now: datetime) -> float:
-    return max(
-        -1.0,
-        (now - shipment.depart_at).total_seconds() / 60.0 * shipment.time_scale,
-    )
+def _elapsed_sim_min(shipment: Shipment, now: datetime, total_min: float = 0.0) -> float:
+    raw = (now - shipment.depart_at).total_seconds() / 60.0 * shipment.time_scale
+    # Döngüsel demo aracı: plan bitince başa sar → sonsuz hareket.
+    if shipment.loop and total_min > 0 and raw >= 0:
+        return raw % total_min
+    return max(-1.0, raw)
 
 
 def _shipment_out(shipment: Shipment, now: datetime) -> ShipmentOut:
     plan = _plan_of(shipment)
-    elapsed = _elapsed_sim_min(shipment, now)
+    elapsed = _elapsed_sim_min(shipment, now, plan.total_min)
     live = position_at(plan, elapsed)
     depot = shipment.stops[0]["_depot"]
     route = (
@@ -296,7 +297,7 @@ def shipment_detail(
     now = datetime.now(UTC)
     base = _shipment_out(shipment, now)
     plan = _plan_of(shipment)
-    elapsed = _elapsed_sim_min(shipment, now)
+    elapsed = _elapsed_sim_min(shipment, now, plan.total_min)
 
     stop_etas: list[StopEta] = []
     for idx, s in enumerate(shipment.stops):

@@ -3,12 +3,12 @@ import { toast } from "sonner";
 import { Radio, RouteOff, Truck, Waypoints } from "lucide-react";
 import { useAppDispatch } from "@/app/hooks";
 import {
+  useActiveShipmentsQuery,
   useClearShipmentsMutation,
   useCreateShipmentsMutation,
   useVehicleRoutesMutation,
 } from "@/api/endpoints/logistics";
 import { useWarehousesQuery } from "@/api/endpoints/warehouses";
-import { useShipmentsLive } from "@/features/map/useShipmentsLive";
 import { toursPreviewed } from "@/features/map/mapWorkspaceSlice";
 import { tourColor } from "@/features/map/trackingLayers";
 import { apiErrorMessage } from "@/lib/apiError";
@@ -43,7 +43,9 @@ export function LogisticsPanel() {
   const [planTours, planState] = useVehicleRoutesMutation();
   const [startShipments, startState] = useCreateShipmentsMutation();
   const [clearShipments] = useClearShipmentsMutation();
-  const { shipments, transport } = useShipmentsLive(true);
+  // Abonelik MapWorkspacePage'de; burada yalnız önbellekten okunur.
+  const shipments = useActiveShipmentsQuery().data ?? [];
+  const transport = import.meta.env.VITE_DEMO === "1" ? "poll" : "ws";
   const hasLive = shipments.length > 0;
   const selectedWh = warehouseId ?? warehouses.data?.[0]?.id ?? null;
 

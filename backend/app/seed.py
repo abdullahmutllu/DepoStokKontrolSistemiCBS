@@ -217,6 +217,76 @@ def _seed_extra_warehouses(db, org_id: int, user_id: int) -> int:
     return created
 
 
+def _seed_shipments(db, org_id: int) -> int:
+    """Haritada hep hareket eden döngüsel demo araçları (loop=True) — her
+    depodan bir tane, haritaya yayılmış 3 kamyon.
+
+    Plan bitince başa sardıkları için sürekli yolda görünürler; ziyaretçi hiç
+    'Sevkiyatı başlat' demeden canlı takibi izler. depart_at şu an → araçlar
+    demo açılır açılmaz depodan çıkar."""
+    from datetime import UTC, datetime
+
+    from app.models import Customer, Shipment, Warehouse
+
+    if db.scalar(select(Shipment).where(Shipment.org_id == org_id)) is not None:
+        return 0
+    from app.services.tracking import TrackStop, build_plan
+    from app.services.vrp import VrpStop, solve_vrp
+
+    warehouses = list(db.scalars(select(Warehouse).where(Warehouse.org_id == org_id)).all())
+    if not warehouses:
+        return 0
+    wh_pts = {w.id: geo.point_to_latlng(w.location) for w in warehouses}
+    customers = list(db.scalars(select(Customer).where(Customer.org_id == org_id)).all())
+    by_id = {c.id: c.name for c in customers}
+
+    # her müşteriyi en yakın depoya ata
+    assigned: dict[int, list[VrpStop]] = {w.id: [] for w in warehouses}
+    for c in customers:
+        loc = geo.point_to_latlng(c.location)
+        nearest = min(warehouses, key=lambda w: geo.haversine_km(loc, wh_pts[w.id]))
+        assigned[nearest.id].append(VrpStop(id=c.id, lat=loc.lat, lng=loc.lng, demand=c.weight))
+
+    now = datetime.now(UTC)
+    created = 0
+    # en çok müşterisi olan ilk 3 depodan birer araç
+    top = sorted(warehouses, key=lambda w: -len(assigned[w.id]))[:3]
+    for i, warehouse in enumerate(top):
+        mine = assigned[warehouse.id]
+        if len(mine) < 2:
+            continue
+        depot = wh_pts[warehouse.id]
+        # tek rotaya birleştir (bu deponun aracı), en fazla 6 durak
+        routes = solve_vrp((depot.lat, depot.lng), mine, 1, 10_000)
+        if not routes or not routes[0].stops:
+            continue
+        route_stops = routes[0].stops[:6]
+        stops = [
+            {
+                "customer_id": s.id, "name": by_id.get(s.id, f"Müşteri {s.id}"),
+                "lat": s.lat, "lng": s.lng, "demand": s.demand, "service_min": 12.0,
+            }
+            for s in route_stops
+        ]
+        stops[0]["_depot"] = {"lat": depot.lat, "lng": depot.lng}
+        plan = build_plan(
+            (depot.lat, depot.lng),
+            [TrackStop(id=s["customer_id"], name=s["name"], lat=s["lat"], lng=s["lng"],
+                       service_min=s["service_min"]) for s in stops],
+        )
+        db.add(
+            Shipment(
+                org_id=org_id, warehouse_id=warehouse.id, vehicle_name=f"Araç {i + 1}",
+                stops=stops, base_speed_kmh=65.0, time_scale=30.0,
+                total_km=plan.total_km, total_min=plan.total_min,
+                loop=True, depart_at=now,
+            )
+        )
+        created += 1
+    db.flush()
+    return created
+
+
 def _seed_orders(db, org_id: int) -> int:
     """Dalga toplama demosu için açık siparişler (isimle idempotent)."""
     from app.models import Order, OrderLine, Product, Warehouse
@@ -264,12 +334,13 @@ def seed() -> None:
             created = _seed_extra_warehouses(db, existing.org_id, existing.id)
             created_customers = _seed_customers(db, existing.org_id)
             created_orders = _seed_orders(db, existing.org_id)
+            created_ships = _seed_shipments(db, existing.org_id)
             db.commit()
-            if created or created_customers or created_orders:
+            if created or created_customers or created_orders or created_ships:
                 print(
                     f"Temel seed mevcut; {created} ek depo, "
                     f"{created_customers} müşteri noktası, "
-                    f"{created_orders} sipariş eklendi."
+                    f"{created_orders} sipariş, {created_ships} demo aracı eklendi."
                 )
             else:
                 print(f"Seed zaten mevcut ({DEMO_EMAIL}); atlanıyor.")
@@ -436,6 +507,7 @@ def seed() -> None:
         extra = _seed_extra_warehouses(db, org.id, owner.id)
         _seed_customers(db, org.id)
         _seed_orders(db, org.id)
+        _seed_shipments(db, org.id)
 
         db.commit()
         bin_count = len(bins)
