@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Crosshair, FileUp, Pause, Play, PowerOff, X } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/app/hooks";
@@ -64,19 +64,21 @@ export function NetworkPanel() {
   const [scenarioResult, setScenarioResult] = useState<ScenarioResult | null>(null);
 
   // Akış zaman animasyonu: oynatılırken 14 günü 0.9 sn arayla gezer.
+  // days günde bir değişir → mount başına bir kez üretilir; başlangıç
+  // indeksi ref'te tutulur ki flowDay her tick'te değişince interval sıfırlanmasın.
   const [playing, setPlaying] = useState(false);
-  const days = lastDays(14);
+  const days = useMemo(() => lastDays(14), []);
+  const flowDayRef = useRef(flowDay);
+  flowDayRef.current = flowDay;
   useEffect(() => {
     if (!playing) return;
-    let idx = flowDay ? Math.max(0, days.indexOf(flowDay)) : 0;
+    let idx = flowDayRef.current ? Math.max(0, days.indexOf(flowDayRef.current)) : 0;
     const timer = setInterval(() => {
       idx = (idx + 1) % days.length;
       dispatch(flowDayChanged(days[idx]));
     }, 900);
     return () => clearInterval(timer);
-    // days her render'da yeniden üretilir; içerik günde bir değişir
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, dispatch]);
+  }, [playing, dispatch, days]);
 
   const stopAnimation = () => {
     setPlaying(false);

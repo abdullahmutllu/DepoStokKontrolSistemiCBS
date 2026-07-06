@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Sparkles } from "lucide-react";
+import { ScanBarcode, Sparkles } from "lucide-react";
 import { useProductsQuery } from "@/api/endpoints/products";
 import { useWarehousesQuery, useLocationsQuery } from "@/api/endpoints/warehouses";
 import {
@@ -17,6 +17,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Card, CardBody } from "@/components/ui/card";
 import { MonoCell } from "@/components/shared/table";
 import { apiErrorMessage } from "@/lib/apiError";
+import { BarcodeScanner } from "@/components/shared/BarcodeScanner";
 
 type OpType = "receive" | "pick" | "transfer" | "adjust";
 
@@ -28,6 +29,7 @@ export function StockOpsPage() {
   const [toLocationId, setToLocationId] = useState<number | "">("");
   const [quantity, setQuantity] = useState("");
   const [note, setNote] = useState("");
+  const [scanning, setScanning] = useState(false);
 
   const warehouses = useWarehousesQuery();
   const products = useProductsQuery({ page: 1, page_size: 200 });
@@ -114,6 +116,20 @@ export function StockOpsPage() {
     }
   };
 
+  const onBarcode = (code: string) => {
+    setScanning(false);
+    const items = products.data?.items ?? [];
+    const hit = items.find(
+      (p) => p.barcode === code || p.sku.toLowerCase() === code.toLowerCase(),
+    );
+    if (hit) {
+      setProductId(hit.id);
+      toast.success(`Barkod eşleşti: ${hit.sku} — ${hit.name}`);
+    } else {
+      toast.error(`'${code}' hiçbir ürünün barkodu/SKU'suyla eşleşmedi.`);
+    }
+  };
+
   const opLabels: Record<OpType, { title: string; verb: string; qtyLabel: string }> = {
     receive: { title: "Mal Kabul", verb: "Mal kabul et", qtyLabel: "Miktar" },
     pick: { title: "Toplama", verb: "Topla", qtyLabel: "Miktar" },
@@ -141,9 +157,18 @@ export function StockOpsPage() {
             <Card className="max-w-xl">
               <CardBody className="space-y-3">
                 <div>
-                  <label htmlFor="op-product" className="mb-1 block text-[12px] text-text-muted">
-                    Ürün
-                  </label>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label htmlFor="op-product" className="block text-[12px] text-text-muted">
+                      Ürün
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setScanning(true)}
+                      className="flex items-center gap-1 text-[11.5px] text-accent hover:underline"
+                    >
+                      <ScanBarcode size={12} /> Barkod okut
+                    </button>
+                  </div>
                   <Select
                     id="op-product"
                     value={productId}
@@ -269,6 +294,8 @@ export function StockOpsPage() {
       <p className="mt-3 text-[11.5px] text-text-faint">
         İpucu: göz kodu <MonoCell>Z1-A2-R3-S2-B4</MonoCell> = zon 1, koridor 2, raf 3, kat 2, göz 4.
       </p>
+
+      {scanning && <BarcodeScanner onDetect={onBarcode} onClose={() => setScanning(false)} />}
     </div>
   );
 }

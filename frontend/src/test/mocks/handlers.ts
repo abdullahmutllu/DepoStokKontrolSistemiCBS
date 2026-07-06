@@ -303,6 +303,40 @@ export const handlers = [
   http.post("/api/v1/ai/slotting", () =>
     HttpResponse.json({ ai_available: true, suggestions: [], explanation: "" }),
   ),
+  http.get("/api/v1/ai/summary", () =>
+    HttpResponse.json({ ai_available: false, summary: "", anomalies: [] }),
+  ),
+  http.get("/api/v1/reports/warehouse-summaries", () =>
+    HttpResponse.json([
+      {
+        warehouse_id: 3, warehouse_name: "İstanbul Ana Depo", zone_count: 1,
+        rack_count: 5, bin_count: 164, used_bin_count: 37,
+        total_quantity: 2271, occupancy_percent: 22.6,
+      },
+    ]),
+  ),
+  http.get("/api/v1/reports/low-stock", () => HttpResponse.json([])),
+  http.get("/api/v1/reports/movement-history", () => HttpResponse.json([])),
+  http.get("/api/v1/reports/occupancy", () => HttpResponse.json([])),
+  http.get("/api/v1/reports/stock-by-location", () => HttpResponse.json([])),
+  http.get("/api/v1/reports/top-movers", () => HttpResponse.json([])),
+  http.get("/api/v1/products/:id/forecast", ({ params }) =>
+    HttpResponse.json({
+      product_id: Number(params.id),
+      sku: "PLT-EUR",
+      name: "Euro Palet 80x120",
+      current_stock: 5,
+      daily_avg: 1.2,
+      daily_std: 0.8,
+      reorder_point: 6,
+      days_until_stockout: 4,
+      series: [
+        { day: "2026-07-01", quantity: 2, kind: "actual" },
+        { day: "2026-07-05", quantity: 1, kind: "actual" },
+        { day: "2026-07-06", quantity: 1.3, kind: "forecast" },
+      ],
+    }),
+  ),
 
   http.post("/api/v1/auth/login", async ({ request }) => {
     const body = (await request.json()) as { email: string; password: string };

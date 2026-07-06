@@ -12,6 +12,7 @@ import {
   PieChart,
   Warehouse as WarehouseIcon,
   X,
+  ClipboardList,
 } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/app/hooks";
 import { loggedOut } from "@/features/auth/authSlice";
@@ -24,6 +25,7 @@ const NAV = [
   { to: "/warehouses", label: "Depolar", icon: WarehouseIcon },
   { to: "/products", label: "Ürünler", icon: Package },
   { to: "/stock", label: "Stok İşlemleri", icon: ArrowLeftRight },
+  { to: "/orders", label: "Siparişler", icon: ClipboardList },
   { to: "/movements", label: "Hareketler", icon: Boxes },
   { to: "/reports", label: "Raporlar", icon: PieChart },
   { to: "/ask", label: "Asistan", icon: MessageSquareText },

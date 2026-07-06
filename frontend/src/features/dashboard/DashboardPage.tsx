@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useWarehouseSummariesQuery, useLowStockQuery } from "@/api/endpoints/reports";
+import { useKpiQuery } from "@/api/endpoints/logistics";
 import { useAiSummaryQuery } from "@/api/endpoints/ai";
 import { PageHeader, EmptyState, ErrorState, LoadingRows } from "@/components/shared/states";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,10 +11,20 @@ import { occupancyBucket } from "@/features/three/occupancy";
 import { apiErrorMessage } from "@/lib/apiError";
 import { Button } from "@/components/ui/button";
 
+const KPI_TILES = [
+  { key: "inventory_turnover_30d", label: "Devir hızı · 30g", format: (v: number) => v.toFixed(2) },
+  { key: "outbound_units_30d", label: "Çıkış · 30g", format: (v: number) => v.toLocaleString("tr-TR") },
+  { key: "inbound_units_30d", label: "Giriş · 30g", format: (v: number) => v.toLocaleString("tr-TR") },
+  { key: "movements_per_day_7d", label: "Hareket/gün · 7g", format: (v: number) => v.toFixed(1) },
+  { key: "open_orders", label: "Açık sipariş", format: (v: number) => String(v) },
+  { key: "active_shipments", label: "Aktif sevkiyat", format: (v: number) => String(v) },
+] as const;
+
 export function DashboardPage() {
   const summaries = useWarehouseSummariesQuery();
   const lowStock = useLowStockQuery();
   const aiSummary = useAiSummaryQuery();
+  const kpi = useKpiQuery();
 
   return (
     <div>
@@ -21,6 +32,21 @@ export function DashboardPage() {
         title="Genel Bakış"
         description="Tüm depolarınızın doluluk ve stok durumu tek bakışta."
       />
+
+      {/* KPI şeridi: operasyonun nabzı */}
+      {kpi.data && (
+        <div
+          className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6"
+          data-testid="kpi-strip"
+        >
+          {KPI_TILES.map(({ key, label, format }) => (
+            <div key={key} className="rounded-md border border-ink-600 bg-ink-850 px-3 py-2">
+              <div className="mono text-[16px] font-medium">{format(kpi.data![key])}</div>
+              <div className="text-[10.5px] uppercase tracking-wide text-text-faint">{label}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Warehouse tiles */}
       {summaries.isLoading ? (

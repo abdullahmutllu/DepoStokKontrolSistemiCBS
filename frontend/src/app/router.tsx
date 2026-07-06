@@ -10,6 +10,7 @@ import { WarehouseDetailPage } from "@/features/warehouses/WarehouseDetailPage";
 import { ProductsPage } from "@/features/products/ProductsPage";
 import { StockOpsPage } from "@/features/stock/StockOpsPage";
 import { MovementsPage } from "@/features/stock/MovementsPage";
+import { OrdersPage } from "@/features/orders/OrdersPage";
 import { ReportsPage } from "@/features/reports/ReportsPage";
 import { AskPage } from "@/features/ai/AskPage";
 
@@ -33,6 +34,7 @@ export const router = createBrowserRouter([
       { path: "warehouses/:id", element: <WarehouseDetailPage /> },
       { path: "products", element: <ProductsPage /> },
       { path: "stock", element: <StockOpsPage /> },
+      { path: "orders", element: <OrdersPage /> },
       { path: "movements", element: <MovementsPage /> },
       { path: "reports", element: <ReportsPage /> },
       { path: "ask", element: <AskPage /> },

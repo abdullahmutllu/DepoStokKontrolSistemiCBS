@@ -20,6 +20,11 @@ import {
   useStockByLocationQuery,
   useTopMoversQuery,
 } from "@/api/endpoints/reports";
+import {
+  useProductForecastQuery,
+  useReorderSuggestionsQuery,
+} from "@/api/endpoints/logistics";
+import { ReferenceLine } from "recharts";
 import { PageHeader, EmptyState, ErrorState, LoadingRows } from "@/components/shared/states";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable, THead, Th, Tr, Td, MonoCell } from "@/components/shared/table";
@@ -296,6 +301,138 @@ export function ReportsPage() {
               </tbody>
             </DataTable>
           )}
+        </CardBody>
+      </Card>
+
+      {/* Talep tahmini + yeniden sipariş */}
+      <ForecastSection />
+    </div>
+  );
+}
+
+/** Holt tahmini: 30 gün gerçek çıkış + 14 gün öngörü; yanında order-up-to
+ * politikasıyla yeniden sipariş önerileri. Satıra tıklamak grafiği değiştirir. */
+function ForecastSection() {
+  const reorder = useReorderSuggestionsQuery();
+  const [productId, setProductId] = useState<number | null>(null);
+  const activeProduct = productId ?? reorder.data?.[0]?.product_id ?? null;
+  const forecast = useProductForecastQuery(activeProduct ?? 0, {
+    skip: activeProduct == null,
+  });
+
+  const chartData = useMemo(
+    () =>
+      (forecast.data?.series ?? []).map((p) => ({
+        day: p.day.slice(5),
+        gercek: p.kind === "actual" ? p.quantity : undefined,
+        tahmin: p.kind === "forecast" ? p.quantity : undefined,
+      })),
+    [forecast.data],
+  );
+
+  return (
+    <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2" data-testid="forecast-section">
+      <Card>
+        <CardHeader>
+          <CardTitle>Yeniden Sipariş Önerileri</CardTitle>
+        </CardHeader>
+        <CardBody>
+          {reorder.isLoading ? (
+            <LoadingRows rows={3} />
+          ) : !reorder.data || reorder.data.length === 0 ? (
+            <p className="py-3 text-center text-[12.5px] text-text-muted">
+              Sipariş noktasının altında ürün yok — stok sağlıklı.
+            </p>
+          ) : (
+            <DataTable>
+              <THead>
+                <Th>SKU</Th>
+                <Th className="text-right">Stok</Th>
+                <Th className="text-right">ROP</Th>
+                <Th className="text-right">Bitiş (gün)</Th>
+                <Th className="text-right">Önerilen</Th>
+              </THead>
+              <tbody>
+                {reorder.data.map((r) => (
+                  <Tr
+                    key={r.product_id}
+                    className="cursor-pointer"
+                    onClick={() => setProductId(r.product_id)}
+                  >
+                    <Td>
+                      <MonoCell className={r.product_id === activeProduct ? "text-accent" : ""}>
+                        {r.sku}
+                      </MonoCell>
+                    </Td>
+                    <Td className="text-right"><MonoCell>{r.current_stock}</MonoCell></Td>
+                    <Td className="text-right"><MonoCell>{r.reorder_point}</MonoCell></Td>
+                    <Td className="text-right">
+                      <MonoCell
+                        className={
+                          r.days_until_stockout != null && r.days_until_stockout <= 5
+                            ? "text-status-high"
+                            : ""
+                        }
+                      >
+                        {r.days_until_stockout ?? "—"}
+                      </MonoCell>
+                    </Td>
+                    <Td className="text-right">
+                      <MonoCell className="text-status-low">+{r.suggested_order_qty}</MonoCell>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </DataTable>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Talep Tahmini{forecast.data ? ` — ${forecast.data.sku}` : ""}</CardTitle>
+        </CardHeader>
+        <CardBody>
+          {activeProduct == null ? (
+            <p className="py-3 text-center text-[12.5px] text-text-muted">
+              Soldaki tablodan ürün seçin; 30 günlük tüketim ve 14 günlük Holt
+              tahmini burada çizilir.
+            </p>
+          ) : forecast.isLoading ? (
+            <LoadingRows rows={4} />
+          ) : forecast.data ? (
+            <>
+              <div className="mb-2 flex flex-wrap gap-3 text-[11.5px] text-text-muted">
+                <span>Günlük ort. <MonoCell>{forecast.data.daily_avg}</MonoCell></span>
+                <span>ROP <MonoCell>{forecast.data.reorder_point}</MonoCell></span>
+                <span>Stok <MonoCell>{forecast.data.current_stock}</MonoCell></span>
+                {forecast.data.days_until_stockout != null && (
+                  <span className="text-status-mid">
+                    ~<MonoCell>{forecast.data.days_until_stockout}</MonoCell> günde tükenir
+                  </span>
+                )}
+              </div>
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={chartData} margin={{ left: -18, right: 8 }}>
+                  <CartesianGrid stroke="#2a3550" strokeDasharray="3 3" />
+                  <XAxis dataKey="day" tick={CHART_TEXT} interval={6} />
+                  <YAxis tick={CHART_TEXT} allowDecimals={false} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <ReferenceLine y={forecast.data.daily_avg} stroke="#8a94ad" strokeDasharray="4 4" />
+                  <Line dataKey="gercek" stroke="#5e8bff" strokeWidth={1.8} dot={false} name="Gerçek çıkış" />
+                  <Line
+                    dataKey="tahmin"
+                    stroke="#e0a93e"
+                    strokeWidth={1.8}
+                    strokeDasharray="6 3"
+                    dot={false}
+                    name="Tahmin (Holt)"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </>
+          ) : null}
         </CardBody>
       </Card>
     </div>
