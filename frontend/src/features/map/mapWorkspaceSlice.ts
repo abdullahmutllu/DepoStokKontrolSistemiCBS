@@ -42,6 +42,10 @@ interface MapWorkspaceState {
   scenarioClosedIds: number[];
   /** Akış animasyonu: seçili gün (YYYY-MM-DD) — null = tüm günler toplu. */
   flowDay: string | null;
+  /** İç mekân: haritada içine girilen deponun id'si (null = sadece dış harita). */
+  indoorWarehouseId: number | null;
+  /** Aktif kat sırası (ordinal); 0 = zemin. İç mekân katmanları buna göre süzülür. */
+  activeLevel: number;
 }
 
 const initialState: MapWorkspaceState = {
@@ -63,6 +67,8 @@ const initialState: MapWorkspaceState = {
   toursPreview: null,
   scenarioClosedIds: [],
   flowDay: null,
+  indoorWarehouseId: null,
+  activeLevel: 0,
 };
 
 const mapWorkspaceSlice = createSlice({
@@ -111,6 +117,18 @@ const mapWorkspaceSlice = createSlice({
     flowDayChanged(state, action: PayloadAction<string | null>) {
       state.flowDay = action.payload;
     },
+    indoorEntered(state, action: PayloadAction<number>) {
+      state.indoorWarehouseId = action.payload;
+      state.activeLevel = 0;
+      state.selectedWarehouseId = null; // popup'ı kapat, iç mekâna geç
+    },
+    indoorExited(state) {
+      state.indoorWarehouseId = null;
+      state.activeLevel = 0;
+    },
+    activeLevelChanged(state, action: PayloadAction<number>) {
+      state.activeLevel = action.payload;
+    },
   },
 });
 
@@ -127,5 +145,8 @@ export const {
   toursPreviewed,
   scenarioClosed,
   flowDayChanged,
+  indoorEntered,
+  indoorExited,
+  activeLevelChanged,
 } = mapWorkspaceSlice.actions;
 export default mapWorkspaceSlice.reducer;

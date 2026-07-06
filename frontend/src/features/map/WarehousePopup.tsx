@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, X } from "lucide-react";
+import { ArrowRight, LogIn, X } from "lucide-react";
 import type { Warehouse } from "@/types";
 import { MonoCell } from "@/components/shared/table";
 import { OccupancyBadge } from "@/components/ui/badge";
@@ -9,9 +9,11 @@ import { occupancyBucket } from "@/features/three/occupancy";
 export function WarehousePopup({
   warehouse,
   onClose,
+  onEnterIndoor,
 }: {
   warehouse: Warehouse;
   onClose: () => void;
+  onEnterIndoor?: () => void;
 }) {
   const pct = warehouse.occupancy_percent;
   const bucket =
@@ -73,11 +75,19 @@ export function WarehousePopup({
           ))}
         </div>
 
+        {onEnterIndoor && (
+          <button
+            onClick={onEnterIndoor}
+            className="flex w-full items-center justify-center gap-1.5 rounded bg-accent/15 py-1.5 text-[12.5px] font-medium text-accent transition-colors hover:bg-accent/25"
+          >
+            <LogIn size={13} /> Haritada içine gir
+          </button>
+        )}
         <Link
           to={`/warehouses/${warehouse.id}`}
-          className="flex items-center justify-center gap-1 rounded bg-accent/15 py-1.5 text-[12.5px] font-medium text-accent transition-colors hover:bg-accent/25"
+          className="flex items-center justify-center gap-1 rounded py-1.5 text-[12.5px] font-medium text-text-muted transition-colors hover:text-text"
         >
-          Depoya git <ArrowRight size={13} />
+          3B depo görünümü <ArrowRight size={13} />
         </Link>
       </div>
     </div>

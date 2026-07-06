@@ -77,7 +77,8 @@ describe("MapWorkspacePage", () => {
     await user.click(marker);
     const popup = await screen.findByTestId("warehouse-popup");
     expect(popup).toHaveTextContent("İstanbul Ana Depo");
-    expect(popup).toHaveTextContent("Depoya git");
+    expect(popup).toHaveTextContent("Haritada içine gir");
+    expect(popup).toHaveTextContent("3B depo görünümü");
   });
 });
 

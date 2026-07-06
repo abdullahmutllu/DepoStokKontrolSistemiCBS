@@ -8,10 +8,21 @@ import { BASEMAPS, buildWorkspaceStyle } from "@/features/map/mapStyles";
 import { createDrawController, type DrawController } from "@/features/map/drawController";
 import { featureToRing, lineLengthM, markerStyle, ringToFeature } from "@/features/map/geometry";
 import {
+  activeLevelChanged,
+  indoorEntered,
+  indoorExited,
   measureUpdated,
   ringDrawn,
   warehouseSelected,
 } from "@/features/map/mapWorkspaceSlice";
+import { useLayout3dQuery } from "@/api/endpoints/warehouses";
+import {
+  buildIndoorData,
+  emptyIndoorData,
+  indoorBounds,
+  syncIndoorLayers,
+} from "@/features/map/indoorLayers";
+import { IndoorControl } from "@/features/map/IndoorControl";
 import {
   useClosestFacilityQuery,
   useCoverageQuery,
@@ -54,6 +65,11 @@ export function GisMap({ warehouses }: GisMapProps) {
   const toursPreview = useAppSelector((s) => s.mapWorkspace.toursPreview);
   const scenarioClosedIds = useAppSelector((s) => s.mapWorkspace.scenarioClosedIds);
   const flowDay = useAppSelector((s) => s.mapWorkspace.flowDay);
+  const indoorWarehouseId = useAppSelector((s) => s.mapWorkspace.indoorWarehouseId);
+  const activeLevel = useAppSelector((s) => s.mapWorkspace.activeLevel);
+  const indoorLayout = useLayout3dQuery(indoorWarehouseId ?? 0, {
+    skip: indoorWarehouseId == null,
+  });
   // Canlı sevkiyatlar: WS/poll aboneliğini LogisticsPanel yönetir; harita
   // yalnız RTK önbelleğini okur (çift soket açılmaz).
   const shipmentsQuery = useActiveShipmentsQuery();
@@ -205,6 +221,26 @@ export function GisMap({ warehouses }: GisMapProps) {
     syncTrackingLayers(map, routes, beforeId);
   }, [mapReady, toursPreview, shipments]);
 
+  // İç mekân katmanları: bir depoya girilince Layout3D georef ile haritaya
+  // projekte edilir; aktif kata göre süzülür; ilk girişte footprint'e uçar.
+  const indoorEnteredRef = useRef<number | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const beforeId = map.getStyle().layers?.find((l) => l.id.startsWith("td-"))?.id;
+    if (indoorWarehouseId == null || !indoorLayout.data) {
+      syncIndoorLayers(map, emptyIndoorData(), null, beforeId);
+      indoorEnteredRef.current = null;
+      return;
+    }
+    syncIndoorLayers(map, buildIndoorData(indoorLayout.data), activeLevel, beforeId);
+    if (indoorEnteredRef.current !== indoorWarehouseId) {
+      const b = indoorBounds(indoorLayout.data);
+      if (b) map.fitBounds(b, { padding: 64, duration: 900, maxZoom: 21 });
+      indoorEnteredRef.current = indoorWarehouseId;
+    }
+  }, [mapReady, indoorWarehouseId, indoorLayout.data, activeLevel]);
+
   // Canlı araç marker'ları: konum her karede değişir; DOM marker + CSS
   // geçişiyle akıcı kayar, ok simgesi kerterize döner.
   const vehicleMarkersRef = useRef(new Map<number, Marker>());
@@ -326,8 +362,20 @@ export function GisMap({ warehouses }: GisMapProps) {
           <WarehousePopup
             warehouse={selectedWarehouse}
             onClose={() => dispatch(warehouseSelected(null))}
+            onEnterIndoor={() => dispatch(indoorEntered(selectedWarehouse.id))}
           />
         </div>
+      )}
+      {indoorWarehouseId != null && (
+        <IndoorControl
+          warehouseName={
+            warehouses.find((w) => w.id === indoorWarehouseId)?.name ?? "Depo"
+          }
+          levels={indoorLayout.data?.levels ?? []}
+          activeLevel={activeLevel}
+          onLevel={(ord) => dispatch(activeLevelChanged(ord))}
+          onExit={() => dispatch(indoorExited())}
+        />
       )}
     </div>
   );

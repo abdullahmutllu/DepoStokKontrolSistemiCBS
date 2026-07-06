@@ -63,6 +63,7 @@ vi.mock("maplibre-gl", () => {
     setLayoutProperty(id: string, _prop: string, value: string) {
       this.layoutProps[id] = value;
     }
+    setFilter() {}
     addSource(id: string, def: { type: string; data: unknown }) {
       this.sources[id] = def;
     }

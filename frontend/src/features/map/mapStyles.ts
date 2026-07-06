@@ -34,12 +34,16 @@ export function buildWorkspaceStyle(): StyleSpecification {
         type: "raster",
         tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
         tileSize: 256,
+        // Sağlayıcının sunduğu en derin zoom; iç mekân gibi daha derin zoom'da
+        // MapLibre bu tile'ları esneterek gösterir (aksi halde 404 seli olur).
+        maxzoom: 19,
         attribution: "© OpenStreetMap katkıda bulunanlar",
       },
       "esri-uydu": {
         type: "raster",
         tiles: [ESRI_IMAGERY_URL],
         tileSize: 256,
+        maxzoom: 19,
         attribution:
           "Powered by Esri | Kaynak: Esri, Maxar, Earthstar Geographics, GIS User Community",
       },
@@ -47,6 +51,7 @@ export function buildWorkspaceStyle(): StyleSpecification {
         type: "raster",
         tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
         tileSize: 256,
+        maxzoom: 17,
         attribution: "© OpenStreetMap katkıda bulunanlar, SRTM | © OpenTopoMap (CC-BY-SA)",
       },
     },
