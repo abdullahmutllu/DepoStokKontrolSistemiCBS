@@ -25,6 +25,7 @@ import {
   useReorderSuggestionsQuery,
 } from "@/api/endpoints/logistics";
 import { ReferenceLine } from "recharts";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { PageHeader, EmptyState, ErrorState, LoadingRows } from "@/components/shared/states";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable, THead, Th, Tr, Td, MonoCell } from "@/components/shared/table";
@@ -334,7 +335,10 @@ function ForecastSection() {
     <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2" data-testid="forecast-section">
       <Card>
         <CardHeader>
-          <CardTitle>Yeniden Sipariş Önerileri</CardTitle>
+          <CardTitle className="flex items-center gap-1.5">
+            Yeniden Sipariş Önerileri
+            <InfoHint text="Stoğu sipariş noktasının altına düşen ürünler. 'Önerilen' sütunu, hedef stoğa ulaşmak için kaç adet sipariş vermen gerektiğini söyler." />
+          </CardTitle>
         </CardHeader>
         <CardBody>
           {reorder.isLoading ? (
@@ -390,7 +394,10 @@ function ForecastSection() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Talep Tahmini{forecast.data ? ` — ${forecast.data.sku}` : ""}</CardTitle>
+          <CardTitle className="flex items-center gap-1.5">
+            Talep Tahmini{forecast.data ? ` — ${forecast.data.sku}` : ""}
+            <InfoHint text="Geçmiş çıkışa bakarak 14 günlük talep tahmini (Holt yöntemi). Kesikli çizgi tahmini, düz çizgi gerçek çıkışı gösterir; ürünün ne zaman biteceğini de hesaplar." />
+          </CardTitle>
         </CardHeader>
         <CardBody>
           {activeProduct == null ? (

@@ -14,6 +14,7 @@ import { tourColor } from "@/features/map/trackingLayers";
 import { apiErrorMessage } from "@/lib/apiError";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { MonoCell } from "@/components/shared/table";
 import type { VehicleRoutes } from "@/types";
 
@@ -81,10 +82,16 @@ export function LogisticsPanel() {
 
   return (
     <div className="space-y-4">
+      <p className="flex items-start gap-1.5 text-[12px] leading-snug text-text-muted">
+        <InfoHint text="Depodan çıkan araçlara teslimat turu kur, sonra haritada canlı takip et. Araçlar gerçek zamanlı ilerler; durak varış süreleri kartlarda görünür." />
+        Teslimat turlarını planla, araçları haritada canlı izle.
+      </p>
+
       {/* Planlama */}
       <div className="rounded-md border border-ink-600 bg-ink-800 p-3">
         <h3 className="mb-2 flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wide text-text-muted">
           <Waypoints size={12} /> Teslimat turları planla (VRP)
+          <InfoHint text="VRP: araç sayısı ve kapasiteye göre müşterileri turlara böler, her turun sırasını kısaltır (Clarke-Wright + 2-opt)." />
         </h3>
         <div className="space-y-1.5">
           <Select
@@ -166,6 +173,7 @@ export function LogisticsPanel() {
               <span className="mono rounded bg-ink-800 px-1.5 py-0.5 text-[9.5px]">
                 {transport === "ws" ? "WebSocket" : "3 sn poll"} · 30× sim
               </span>
+              <InfoHint text="Araçların konumu haritada gerçek zamanlı güncellenir. 30× hızlandırılmış simülasyondur; süre ve mesafeler oransal olarak gerçekçidir." />
             </h3>
             <button
               onClick={() => void clearShipments()}

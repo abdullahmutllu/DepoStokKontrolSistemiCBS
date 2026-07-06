@@ -19,7 +19,15 @@
 
 ### 🇬🇧 English summary
 
-**Depo Konsolu** is a multi-warehouse inventory management system for SMEs that treats *space* as a first-class citizen: warehouses live on a real map (MapLibre + PostGIS), a full **GIS workspace** lets you draw regions and get instant spatial analytics, and every rack is rendered in an **industrial-grade 3D scene** (react-three-fiber) where bin colors and fill heights encode live occupancy. On top of that: a **supply-chain network layer** (demand heatmap, center-of-gravity site suggestion, Voronoi service territories, drive-time coverage via OpenRouteService with an offline fallback), a **digital-twin realistic mode** (CC0 GLTF pallets & cartons, HDRI lighting, N8AO), **stock-alert pins** floating over low-stock bins, and an **order-picking route optimizer** (S-shape / largest-gap / greedy+2-opt) animated on the warehouse floor. And a full **logistics layer**: capacitated **vehicle routing** (Clarke-Wright + 2-opt), **live fleet tracking** where trucks move on the map in real time with per-stop ETAs (WebSocket push, REST-polling fallback), a **what-if scenario** planner (close a warehouse, see the network re-balance), **demand forecasting** (Holt double-exponential) with reorder points, **order + wave picking**, a **KPI dashboard**, and camera **barcode scanning**. An **AI layer** (OpenRouter) translates natural-language questions into safe, whitelisted, org-scoped queries — the model never touches SQL. Fully synchronous FastAPI backend, React 19 frontend, 233 tests, one-command Docker startup, plus a **serverless live demo** that runs the entire API in the browser via MSW. The UI is Turkish; the docs below follow in Turkish.
+**Depo Konsolu** is an inventory system for businesses that run more than one warehouse. It puts *location* first.
+
+Your warehouses sit on a real map. Draw an area and you get its stock and occupancy right away. Step into a warehouse and see every rack in 3D, where each bin's color shows how full it is.
+
+It also plans the supply side: where demand is heavy, which warehouse serves each customer, where a new one should go, and how delivery trucks should route. Trucks then move on the map in real time, with an arrival time for each stop. You can forecast demand, get reorder suggestions, batch orders into a single picking run, and scan barcodes with the camera.
+
+Ask a question in plain language and the AI turns it into a safe, read-only query — it never writes SQL.
+
+FastAPI backend, React 19 frontend, 233 tests, one command to run with Docker. There's also a live demo that runs entirely in your browser, with no server. The app's interface is in Turkish, and so are the docs below.
 
 ---
 
@@ -114,51 +122,45 @@ duraklarla çizilir. Optimum referansı: Ratliff–Rosenthal (1983).
 
 ### 🚚 Canlı Araç Takibi + Teslimat Rotalama
 
-Depoya atanmış müşteriler için **kapasiteli araç rotalama** (Clarke-Wright savings + 2-opt):
-depo/araç sayısı/kapasite seçin, turlar renkli çizgilerle haritaya düşsün. "Sevkiyatı
-başlat" deyince araçlar **gerçek zamanlı** yola çıkar — konumları haritada sürekli güncellenir,
-oklar kerterize döner, her araç kartında **durum, ilerleme %, sıradaki durak ve tahmini
-varış (ETA)** görünür.
+Depo, araç sayısı ve kapasiteyi seçin; sistem müşterileri araçlara böler ve turları
+haritaya çizer (Clarke-Wright + 2-opt). "Sevkiyatı başlat" deyince araçlar yola çıkar.
 
-Takip mimarisi durumsuz: araç konumu saklanmaz, `konum = f(plan, geçen_süre)` ile her
-istekte deterministik hesaplanır. Backend bunu **WebSocket** ile 2 saniyede bir push'lar
-(SignalR muadili, JWT'li); soket kurulamazsa istemci **REST polling'e** düşer. Aynı motor
-tarayıcı-içi demoda TypeScript olarak koşar — canlı demo sunucusuz da araçları hareket ettirir.
+Konumları haritada gerçek zamanlı akar. Her araç kartında durumu, ilerleme yüzdesi,
+sıradaki durak ve tahmini varış süresi görünür.
 
-Demoda haritada **hep 3 araç hazır** gelir (her depodan biri, döngüsel): seed'lenmiş bu
-sevkiyatlar plan bitince başa sarar, böylece hangi sekmede olursanız olun kamyonlar sürekli
-Türkiye üzerinde yol alır — tek tık gerektirmeden.
+Araç konumu kaydedilmez; her istekte plandan ve geçen süreden yeniden hesaplanır.
+Backend bunu WebSocket ile 2 saniyede bir gönderir; soket kurulamazsa REST'e düşer.
+Aynı hesap tarayıcı demosunda da koşar, o yüzden demo sunucusuz da araçları hareket ettirir.
+
+Demoda haritada **hep 3 araç hazır** gelir — her depodan biri. Turları bitince başa
+sardıkları için sürekli yolda kalırlar; tek tık gerekmeden izlersiniz.
 
 ![Canlı araç takibi demosu](docs/media/demo-tracking.gif)
 
 ![Canlı filo — harita üzerinde araçlar](docs/media/live-tracking.png)
 
-### 🔀 What-if Senaryosu — depo kapat, ağı yeniden gör
+### 🔀 What-if Senaryosu — depo kapatınca ne olur?
 
-Bir ya da daha çok depoyu "kapalı" işaretleyin: müşteriler anında en yakın açık depoya
-yeniden atanır, **toplam ağırlıklı taşıma mesafesi**, ortalama mesafe ve kapsama nasıl
-değişir kartta belirir (% fark, yeniden atanan müşteri sayısı, kapsama dışı değişimi).
-Kapalı depolar haritada soluklaşıp üstü çizilir. Ağ tasarımı araçlarının (anyLogistix,
-Coupa) çekirdek sorusu.
+Bir depoyu "kapalı" işaretleyin. Müşteriler en yakın açık depoya taşınır; toplam
+taşıma mesafesi, ortalama mesafe ve kapsamanın nasıl değiştiğini kart olarak görürsünüz.
+Kapalı depolar haritada soluklaşır. Yatırım kararından önce hızlı bir deneme.
 
 ![What-if senaryosu demosu](docs/media/demo-scenario.gif)
 
 ### 📈 Talep Tahmini + Yeniden Sipariş
 
-Her ürünün son 30 günlük çıkışından **Holt çift üstel düzeltme** ile 14 günlük tahmin
-eğrisi; ortalama talep, standart sapma ve güvenlik stoklu **yeniden sipariş noktası (ROP)**.
-"Ne zaman biter?" sorusuna gün cinsinden yanıt + order-up-to politikasıyla önerilen sipariş
-miktarı. Genel Bakış'a operasyonun nabzını tutan **KPI şeridi** (stok devir hızı, giriş/çıkış,
-hareket/gün, açık sipariş, aktif sevkiyat) eklendi.
+Her ürünün geçmiş çıkışına bakıp 14 günlük talebi tahmin eder (Holt yöntemi). Buradan
+yeniden sipariş noktasını, ürünün kaç günde biteceğini ve kaç adet sipariş vermeniz
+gerektiğini çıkarır. Genel Bakış'a bir de özet göstergeler şeridi eklendi: devir hızı,
+giriş/çıkış, açık sipariş, yoldaki araç sayısı.
 
 ![Talep tahmini + reorder demosu](docs/media/demo-forecast.gif)
 
 ### 📥 Sipariş + Dalga Toplama · Barkod
 
-Müşteri siparişleri oluşturun, birden çoğunu **tek dalgada** birleştirin: kalemler ürün
-bazında toplanır, gözlere çözülür ve mevcut rota çözücüyle optimize edilip **yazdırılabilir
-toplama listesi** olarak çıkar. Stok işlemlerinde **kamerayla barkod okuma** (tarayıcı
-yerlisi BarcodeDetector API) ile SKU'yu okutup ürün seçin.
+Sipariş oluşturun, birkaçını seçip tek dalgada toplayın. Aynı ürünler birleşir, gözlere
+dağıtılır ve en kısa yürüme rotasıyla **yazdırılabilir toplama listesi** çıkar — depoda
+tek sefer dolaşırsınız. Stok işlemlerinde ürünü **kamerayla barkod okutarak** seçebilirsiniz.
 
 ![Sipariş + dalga toplama demosu](docs/media/demo-orders.gif)
 

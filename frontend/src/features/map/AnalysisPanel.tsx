@@ -17,6 +17,7 @@ import { formatArea, formatDistance } from "@/features/map/geometry";
 import { TURKEY_REGIONS } from "@/features/map/turkeyRegions";
 import { NetworkPanel } from "@/features/map/NetworkPanel";
 import { LogisticsPanel } from "@/features/map/LogisticsPanel";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { cn } from "@/lib/utils";
 import { apiErrorMessage } from "@/lib/apiError";
 import { Button } from "@/components/ui/button";
@@ -95,13 +96,17 @@ export function AnalysisPanel() {
         </div>
       ) : (
       <div className="flex-1 space-y-4 p-4">
+        <p className="flex items-start gap-1.5 text-[12px] leading-snug text-text-muted">
+          <InfoHint text="Haritada bir alan çiz; o alandaki depoların stok, doluluk ve kritik ürün özetini tek bakışta alırsın. Bölgeleri kaydedip sonra tekrar açabilirsin." />
+          Bir alan çiz, içindeki depoları özetle.
+        </p>
         {!analysisRing ? (
           <div className="rounded-md border border-dashed border-ink-600 px-4 py-8 text-center">
             <Pentagon className="mx-auto mb-2 text-text-faint" size={24} strokeWidth={1.5} />
             <p className="text-[13px] font-medium">Haritada bir bölge çizin</p>
             <p className="mt-1 text-[12px] text-text-muted">
-              Soldaki araçlarla poligon, dikdörtgen ya da daire çizin — içindeki depolar burada
-              analiz edilir. Kayıtlı bölgeler aşağıdan yüklenir.
+              Soldaki araçlarla poligon, dikdörtgen ya da daire çizin. İçindeki depolar
+              burada analiz edilir; kayıtlı bölgeler aşağıdan yüklenir.
             </p>
           </div>
         ) : analysis.isLoading ? (

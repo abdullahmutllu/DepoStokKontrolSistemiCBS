@@ -24,6 +24,7 @@ import type { PickRoute, PolicyRoute } from "@/types";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/shared/states";
 import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { InfoHint } from "@/components/ui/InfoHint";
 import type { SlottingSuggestion } from "@/types";
 import { apiErrorMessage } from "@/lib/apiError";
 import { toast } from "sonner";
@@ -258,9 +259,13 @@ export function Warehouse3DTab({ warehouseId }: { warehouseId: number }) {
               </button>
             ))}
           </div>
+          <div className="flex items-center rounded border border-ink-600 bg-ink-900/90 px-1.5 backdrop-blur">
+            <InfoHint text="Analitik: göz renkleri ve yükseklikleri veriyi gösterir. Gerçekçi: paletler, koliler ve ışıklandırmayla fotoğrafik görünüm." />
+          </div>
           <button
             onClick={() => setWalkMode((v) => !v)}
             aria-pressed={walkMode}
+            title="WASD ve fareyle depo içinde ilk şahıs gez"
             className={`flex items-center gap-1 rounded border border-ink-600 bg-ink-900/90 px-2 py-1 text-[11.5px] font-medium backdrop-blur transition-colors ${
               walkMode ? "text-accent" : "text-text-muted hover:text-text"
             }`}

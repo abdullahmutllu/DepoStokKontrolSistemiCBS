@@ -32,6 +32,7 @@ function lastDays(n: number): string[] {
 import { apiErrorMessage } from "@/lib/apiError";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { MonoCell } from "@/components/shared/table";
 import { LoadingRows } from "@/components/shared/states";
 
@@ -128,10 +129,16 @@ export function NetworkPanel() {
 
   return (
     <div className="space-y-4">
+      <p className="flex items-start gap-1.5 text-[12px] leading-snug text-text-muted">
+        <InfoHint text="Müşteri noktalarını analiz eder: nerede talep yoğun, hangi müşteri hangi depoya yakın, kapsama dışı kalan var mı, yeni depo nereye kurulmalı." />
+        Müşteri ağını çöz: talep, atama, kapsama, yeni depo yeri.
+      </p>
+
       {/* Layer toggles */}
       <div>
-        <h3 className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-text-faint">
+        <h3 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-text-faint">
           Analiz katmanları
+          <InfoHint text="Aç/kapat: her katman haritada bir görünüm ekler — talep ısı haritası, en yakın depo çizgileri, hizmet bölgeleri, kapsama halkaları, depolar arası akış." />
         </h3>
         <div className="space-y-1">
           {LAYER_DEFS.map(({ key, label, hint }) => (
@@ -173,6 +180,7 @@ export function NetworkPanel() {
       <div className="rounded-md border border-ink-600 bg-ink-800 p-3">
         <h3 className="mb-2 flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wide text-text-muted">
           <Crosshair size={12} /> Yeni depo öner (ağırlık merkezi)
+          <InfoHint text="Müşteri talebine göre en uygun depo konumunu hesaplar. Kaç depo istersen o kadar aday nokta önerir ve toplam taşıma mesafesindeki iyileşmeyi gösterir." />
         </h3>
         <div className="flex gap-1.5">
           <Select
@@ -271,8 +279,9 @@ export function NetworkPanel() {
       {toggles.flow && (
         <div className="rounded-md border border-ink-600 bg-ink-800 p-3" data-testid="flow-anim">
           <div className="flex items-center justify-between">
-            <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-faint">
+            <h3 className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-text-faint">
               Akış animasyonu · 14 gün
+              <InfoHint text="Son 14 günde depolar arası transfer hareketini gün gün oynatır. Ok kalınlığı taşınan miktarı gösterir." />
             </h3>
             <div className="flex items-center gap-1">
               <button
@@ -321,6 +330,7 @@ export function NetworkPanel() {
       <div className="rounded-md border border-ink-600 bg-ink-800 p-3" data-testid="scenario-card">
         <h3 className="mb-2 flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wide text-text-muted">
           <PowerOff size={12} /> What-if: depo kapat
+          <InfoHint text="Bir depoyu kapatsan ne olur? Müşteriler en yakın açık depoya taşınır; toplam mesafe ve kapsama nasıl değişir görürsün." />
         </h3>
         <div className="space-y-1">
           {(warehouses.data ?? []).map((w) => (

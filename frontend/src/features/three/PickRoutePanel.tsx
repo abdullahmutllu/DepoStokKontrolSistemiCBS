@@ -5,6 +5,7 @@ import { usePickRouteMutation } from "@/api/endpoints/network";
 import type { PickRoute, PolicyRoute } from "@/types";
 import type { SceneModel } from "@/features/three/sceneModel";
 import { Button } from "@/components/ui/button";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { apiErrorMessage } from "@/lib/apiError";
 
 const POLICY_LABELS: Record<PolicyRoute["policy"], string> = {
@@ -62,6 +63,7 @@ export function PickRoutePanel({
     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-ink-600 bg-ink-850 px-3 py-2">
       <span className="flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wide text-text-muted">
         <Route size={13} /> Toplama rotası
+        <InfoHint text="Toplanacak gözleri seç; üç yöntem yürüme mesafesini karşılaştırır ve en kısası 3B zeminde çizilir. Depoda gereksiz adım atmazsın." />
       </span>
 
       {!result ? (

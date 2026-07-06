@@ -14,6 +14,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable, THead, Th, Tr, Td, MonoCell } from "@/components/shared/table";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { apiErrorMessage } from "@/lib/apiError";
 import type { WavePick } from "@/types";
 
@@ -109,6 +110,7 @@ export function OrdersPage() {
           <Waves size={14} />
           {waveState.isLoading ? "Toplanıyor…" : `Dalga topla (${selected.length})`}
         </Button>
+        <InfoHint text="Birden çok siparişi tek turda topla. Aynı ürünler birleşir, gözlere dağıtılır ve en kısa yürüme rotası çıkar; depoda tek sefer dolaşırsın." />
         {openOrders.length > 0 && selected.length === 0 && (
           <span className="text-[12px] text-text-faint">
             Açık siparişleri işaretleyip tek dalgada toplayın.

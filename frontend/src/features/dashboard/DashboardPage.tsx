@@ -10,6 +10,7 @@ import { OccupancyBadge } from "@/components/ui/badge";
 import { occupancyBucket } from "@/features/three/occupancy";
 import { apiErrorMessage } from "@/lib/apiError";
 import { Button } from "@/components/ui/button";
+import { InfoHint } from "@/components/ui/InfoHint";
 
 const KPI_TILES = [
   { key: "inventory_turnover_30d", label: "Devir hızı · 30g", format: (v: number) => v.toFixed(2) },
@@ -35,16 +36,19 @@ export function DashboardPage() {
 
       {/* KPI şeridi: operasyonun nabzı */}
       {kpi.data && (
-        <div
-          className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6"
-          data-testid="kpi-strip"
-        >
-          {KPI_TILES.map(({ key, label, format }) => (
-            <div key={key} className="rounded-md border border-ink-600 bg-ink-850 px-3 py-2">
-              <div className="mono text-[16px] font-medium">{format(kpi.data![key])}</div>
-              <div className="text-[10.5px] uppercase tracking-wide text-text-faint">{label}</div>
-            </div>
-          ))}
+        <div className="mb-4" data-testid="kpi-strip">
+          <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-text-faint">
+            Özet göstergeler
+            <InfoHint text="Son 30/7 günün operasyon özeti: stok ne hızla dönüyor, ne kadar mal girdi/çıktı, kaç sipariş açık, kaç araç yolda." />
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+            {KPI_TILES.map(({ key, label, format }) => (
+              <div key={key} className="rounded-md border border-ink-600 bg-ink-850 px-3 py-2">
+                <div className="mono text-[16px] font-medium">{format(kpi.data![key])}</div>
+                <div className="text-[10.5px] uppercase tracking-wide text-text-faint">{label}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
