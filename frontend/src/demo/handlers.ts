@@ -21,6 +21,7 @@ import {
   binStockRows,
   binsByWarehouse,
   customers,
+  dailyOutflow,
   DEMO_TOKEN,
   demoUser,
   layout3d,
@@ -28,16 +29,22 @@ import {
   locations,
   movements,
   nextNotificationId,
+  nextOrderId,
   nextProductId,
   nextRegionId,
+  nextShipmentId,
   nextWarehouseId,
   notifications,
+  orders,
+  productById,
   productTotal,
   products,
   recordMovement,
   regions,
+  shipments,
   stock,
   warehouses,
+  type DemoShipment,
 } from "@/demo/data";
 import {
   circleRing,
@@ -48,6 +55,60 @@ import {
   weightedKMeans,
 } from "@/demo/geo";
 import { solvePickRoute } from "@/demo/picking";
+import {
+  buildPlan,
+  daysUntilStockout,
+  demandStats,
+  holtForecast,
+  positionAt,
+  reorderPoint,
+  solveVrp,
+  type TrackStop,
+  type VrpStop,
+} from "@/demo/logistics";
+
+const SERVICE_MIN = 12;
+const COVERAGE_LIMIT_KM = 50;
+
+const nearestWh = (pt: LatLng) =>
+  warehouses.reduce((best, w) =>
+    haversineKm(pt, w.location) < haversineKm(pt, best.location) ? w : best,
+  );
+
+function planOf(s: DemoShipment) {
+  return buildPlan(
+    s.depot,
+    s.stops.map(
+      (st): TrackStop => ({
+        id: st.customer_id,
+        name: st.name,
+        lat: st.lat,
+        lng: st.lng,
+        serviceMin: st.service_min,
+      }),
+    ),
+    s.base_speed_kmh,
+  );
+}
+
+function shipmentOut(s: DemoShipment) {
+  const plan = planOf(s);
+  const elapsed = Math.max(-1, ((Date.now() - s.depart_at_ms) / 60000) * s.time_scale);
+  const live = positionAt(plan, elapsed);
+  const route = [s.depot, ...s.stops.map((st) => ({ lat: st.lat, lng: st.lng })), s.depot];
+  return {
+    id: s.id,
+    warehouse_id: s.warehouse_id,
+    vehicle_name: s.vehicle_name,
+    total_km: Math.round(plan.totalKm * 10) / 10,
+    total_min: Math.round(plan.totalMin * 10) / 10,
+    time_scale: s.time_scale,
+    depart_at: new Date(s.depart_at_ms).toISOString(),
+    stop_count: s.stops.length,
+    live: { ...live, elapsed_sim_min: Math.round(Math.max(0, elapsed) * 10) / 10 },
+    route,
+  };
+}
 
 const err = (status: number, code: string, message: string) =>
   HttpResponse.json({ error: { code, message, details: null } }, { status });
@@ -705,12 +766,14 @@ export const handlers = [
     };
     return HttpResponse.json(body);
   }),
-  http.get("*/api/v1/network/flow-map", () => {
+  http.get("*/api/v1/network/flow-map", ({ request }) => {
+    const day = new URL(request.url).searchParams.get("day");
     const whOfLocation = (locId: number | null) =>
       locId ? warehouses.find((w) => w.id === locationById(locId)?.warehouse_id) : undefined;
     const arcs = new Map<string, { fromWh: (typeof warehouses)[number]; toWh: (typeof warehouses)[number]; qty: number; n: number }>();
     for (const m of movements) {
       if (m.type !== "transfer") continue;
+      if (day && !m.created_at.startsWith(day)) continue;
       const fromWh = whOfLocation(m.from_location_id);
       const toWh = whOfLocation(m.to_location_id);
       if (!fromWh || !toWh || fromWh.id === toWh.id) continue;
@@ -731,6 +794,373 @@ export const handlers = [
         total_quantity: a.qty,
         transfer_count: a.n,
       })),
+    });
+  }),
+
+  /* ── Faz 4: VRP teslimat turları ──────────────────────────────────────── */
+  http.post("*/api/v1/network/vehicle-routes", async ({ request }) => {
+    const body = (await request.json()) as {
+      warehouse_id: number;
+      vehicle_count: number;
+      capacity: number;
+    };
+    const warehouse = warehouses.find((w) => w.id === body.warehouse_id);
+    if (!warehouse) return err(404, "NOT_FOUND", "Depo bulunamadı");
+    const mine = customers
+      .filter((c) => nearestWh(c.location).id === warehouse.id)
+      .map((c): VrpStop => ({ id: c.id, lat: c.location.lat, lng: c.location.lng, demand: c.weight }));
+    if (mine.length < 2) {
+      return err(422, "VALIDATION", "Bu depoya atanmış en az 2 müşteri gerekli.");
+    }
+    const routes = solveVrp(warehouse.location, mine, body.vehicle_count, body.capacity);
+    const byId = new Map(customers.map((c) => [c.id, c]));
+    let totalKm = 0;
+    const tours = routes.map((route, i) => {
+      const stops = route.stops.map((s) => ({
+        customer_id: s.id,
+        name: byId.get(s.id)!.name,
+        location: { lat: s.lat, lng: s.lng },
+        demand: s.demand,
+        service_min: SERVICE_MIN,
+      }));
+      const plan = buildPlan(
+        warehouse.location,
+        stops.map((s) => ({
+          id: s.customer_id, name: s.name, lat: s.location.lat, lng: s.location.lng,
+          serviceMin: s.service_min,
+        })),
+      );
+      totalKm += plan.totalKm;
+      return {
+        vehicle_name: `Araç ${i + 1}`,
+        stops,
+        distance_km: Math.round(plan.totalKm * 10) / 10,
+        duration_min: Math.round(plan.totalMin * 10) / 10,
+        load: route.load,
+      };
+    });
+    return HttpResponse.json({
+      warehouse_id: warehouse.id,
+      vehicle_count: body.vehicle_count,
+      capacity: body.capacity,
+      tours,
+      total_km: Math.round(totalKm * 10) / 10,
+      unassigned_customers: 0,
+      note: `Kuş uçuşu mesafeler + durak başına ${SERVICE_MIN} dk servis. Clarke-Wright + 2-opt.`,
+    });
+  }),
+
+  /* ── Faz 4: canlı sevkiyatlar (durumsuz takip) ────────────────────────── */
+  http.post("*/api/v1/shipments", async ({ request }) => {
+    const body = (await request.json()) as {
+      warehouse_id: number;
+      tours: { vehicle_name: string; stops: { customer_id: number; name: string; location: LatLng; demand: number; service_min: number }[] }[];
+      time_scale?: number;
+      base_speed_kmh?: number;
+    };
+    const warehouse = warehouses.find((w) => w.id === body.warehouse_id);
+    if (!warehouse) return err(404, "NOT_FOUND", "Depo bulunamadı");
+    const now = Date.now();
+    const created: DemoShipment[] = [];
+    body.tours.forEach((tour, i) => {
+      if (!tour.stops.length) return;
+      const stops = tour.stops.map((s) => ({
+        customer_id: s.customer_id, name: s.name, lat: s.location.lat, lng: s.location.lng,
+        demand: s.demand, service_min: s.service_min,
+      }));
+      const plan = buildPlan(
+        warehouse.location,
+        stops.map((s) => ({ id: s.customer_id, name: s.name, lat: s.lat, lng: s.lng, serviceMin: s.service_min })),
+        body.base_speed_kmh ?? 65,
+      );
+      const s: DemoShipment = {
+        id: nextShipmentId(),
+        warehouse_id: warehouse.id,
+        vehicle_name: tour.vehicle_name,
+        stops,
+        depot: warehouse.location,
+        base_speed_kmh: body.base_speed_kmh ?? 65,
+        time_scale: body.time_scale ?? 30,
+        total_km: plan.totalKm,
+        total_min: plan.totalMin,
+        depart_at_ms: now + 30000 * i,
+      };
+      shipments.push(s);
+      created.push(s);
+    });
+    return HttpResponse.json(created.map(shipmentOut), { status: 201 });
+  }),
+  http.get("*/api/v1/shipments/active", () => HttpResponse.json(shipments.map(shipmentOut))),
+  http.delete("*/api/v1/shipments", () => {
+    shipments.length = 0;
+    return new HttpResponse(null, { status: 204 });
+  }),
+  http.get("*/api/v1/shipments/:id", ({ params }) => {
+    const s = shipments.find((x) => x.id === Number(params.id));
+    if (!s) return err(404, "NOT_FOUND", "Sevkiyat bulunamadı");
+    const plan = planOf(s);
+    const elapsed = Math.max(-1, ((Date.now() - s.depart_at_ms) / 60000) * s.time_scale);
+    const stops = s.stops.map((st, idx) => {
+      const arrive = plan.legs[idx].cumArriveMin;
+      const depart = arrive + st.service_min;
+      let status: "done" | "current" | "pending";
+      let eta: number | null;
+      if (elapsed >= depart) {
+        status = "done";
+        eta = null;
+      } else if (elapsed >= arrive) {
+        status = "current";
+        eta = 0;
+      } else {
+        status = "pending";
+        eta = Math.round((arrive - elapsed) * 10) / 10;
+      }
+      return {
+        customer_id: st.customer_id, name: st.name,
+        location: { lat: st.lat, lng: st.lng }, demand: st.demand,
+        status, eta_min: eta, planned_arrive_min: Math.round(arrive * 10) / 10,
+      };
+    });
+    return HttpResponse.json({ ...shipmentOut(s), stops });
+  }),
+
+  /* ── Faz 4: what-if senaryosu (depo kapat) ────────────────────────────── */
+  http.post("*/api/v1/network/scenario", async ({ request }) => {
+    const { closed_warehouse_ids } = (await request.json()) as { closed_warehouse_ids: number[] };
+    const remaining = warehouses.filter((w) => !closed_warehouse_ids.includes(w.id));
+    if (remaining.length === 0) return err(422, "VALIDATION", "En az bir depo açık kalmalı.");
+    if (remaining.length === warehouses.length) {
+      return err(422, "VALIDATION", "Kapatılacak depo bulunamadı.");
+    }
+    const side = (whs: typeof warehouses) => {
+      let weighted = 0;
+      let dist = 0;
+      let uncovered = 0;
+      const assign: Record<number, number> = {};
+      const loads = new Map<number, { warehouse_id: number; warehouse_name: string; customer_count: number; total_weight: number }>();
+      for (const w of whs) {
+        loads.set(w.id, { warehouse_id: w.id, warehouse_name: w.name, customer_count: 0, total_weight: 0 });
+      }
+      for (const c of customers) {
+        const near = whs.reduce((b, w) =>
+          haversineKm(c.location, w.location) < haversineKm(c.location, b.location) ? w : b,
+        );
+        const dkm = haversineKm(c.location, near.location);
+        assign[c.id] = near.id;
+        weighted += dkm * c.weight;
+        dist += dkm;
+        if (dkm > COVERAGE_LIMIT_KM) uncovered++;
+        const load = loads.get(near.id)!;
+        load.customer_count++;
+        load.total_weight += c.weight;
+      }
+      return {
+        assign,
+        side: {
+          total_weighted_km: Math.round(weighted * 10) / 10,
+          avg_distance_km: Math.round((dist / customers.length) * 10) / 10,
+          uncovered_customers: uncovered,
+          loads: [...loads.values()],
+        },
+      };
+    };
+    const base = side(warehouses);
+    const after = side(remaining);
+    const delta = after.side.total_weighted_km - base.side.total_weighted_km;
+    return HttpResponse.json({
+      closed_warehouse_ids,
+      baseline: base.side,
+      scenario: after.side,
+      delta_weighted_km: Math.round(delta * 10) / 10,
+      delta_percent: Math.round((delta / Math.max(base.side.total_weighted_km, 0.001)) * 1000) / 10,
+      reassigned_customers: customers.filter((c) => base.assign[c.id] !== after.assign[c.id]).length,
+    });
+  }),
+
+  /* ── Faz 4: tahmin, reorder, KPI ──────────────────────────────────────── */
+  http.get("*/api/v1/products/:id/forecast", ({ params }) => {
+    const product = productById(Number(params.id));
+    if (!product) return err(404, "NOT_FOUND", "Ürün bulunamadı");
+    const series = dailyOutflow(product.id);
+    const forecast = holtForecast(series, 14);
+    const { avg, std } = demandStats(series);
+    const current = productTotal(product.id);
+    const today = new Date();
+    const points: { day: string; quantity: number; kind: "actual" | "forecast" }[] = [];
+    series.forEach((q, i) => {
+      const day = new Date(today.getTime() - (series.length - 1 - i) * 86_400_000);
+      points.push({ day: day.toISOString().slice(0, 10), quantity: q, kind: "actual" });
+    });
+    forecast.forEach((q, i) => {
+      const day = new Date(today.getTime() + (i + 1) * 86_400_000);
+      points.push({ day: day.toISOString().slice(0, 10), quantity: Math.round(q * 10) / 10, kind: "forecast" });
+    });
+    return HttpResponse.json({
+      product_id: product.id,
+      sku: product.sku,
+      name: product.name,
+      current_stock: current,
+      daily_avg: Math.round(avg * 100) / 100,
+      daily_std: Math.round(std * 100) / 100,
+      reorder_point: reorderPoint(series),
+      days_until_stockout: daysUntilStockout(current, forecast),
+      series: points,
+    });
+  }),
+  http.get("*/api/v1/reports/reorder-suggestions", () => {
+    const out = [];
+    for (const p of products) {
+      const series = dailyOutflow(p.id);
+      const { avg } = demandStats(series);
+      if (avg <= 0 && p.min_stock_threshold <= 0) continue;
+      const rop = Math.max(reorderPoint(series), p.min_stock_threshold);
+      const current = productTotal(p.id);
+      if (current > rop) continue;
+      const target = rop + Math.ceil(avg * 7);
+      out.push({
+        product_id: p.id, sku: p.sku, name: p.name,
+        current_stock: current, reorder_point: rop,
+        days_until_stockout: daysUntilStockout(current, holtForecast(series, 14)),
+        suggested_order_qty: Math.max(target - current, 0),
+      });
+    }
+    out.sort((a, b) => (a.days_until_stockout ?? 999) - (b.days_until_stockout ?? 999));
+    return HttpResponse.json(out);
+  }),
+  http.get("*/api/v1/reports/kpi", () => {
+    const since30 = Date.now() - 30 * 86_400_000;
+    const since7 = Date.now() - 7 * 86_400_000;
+    const sum = (type: string) =>
+      movements
+        .filter((m) => m.type === type && new Date(m.created_at).getTime() >= since30)
+        .reduce((s, m) => s + m.quantity, 0);
+    const outbound = sum("pick");
+    const totalStock = [...stock.values()].reduce((s, q) => s + q, 0);
+    const moves7 = movements.filter((m) => new Date(m.created_at).getTime() >= since7).length;
+    let allBins = 0;
+    let usedBins = 0;
+    for (const bins of binsByWarehouse.values()) {
+      for (const b of bins) {
+        allBins++;
+        if (binQuantity(b.id) > 0) usedBins++;
+      }
+    }
+    const counts = new Map<number, number>();
+    for (const m of movements) counts.set(m.product_id, (counts.get(m.product_id) ?? 0) + 1);
+    const busiest = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    const now = Date.now();
+    const active = shipments.filter((s) => {
+      const el = ((now - s.depart_at_ms) / 60000) * s.time_scale;
+      return el >= 0 && el < s.total_min;
+    }).length;
+    return HttpResponse.json({
+      inventory_turnover_30d: Math.round((outbound / Math.max(totalStock, 1)) * 1000) / 1000,
+      outbound_units_30d: outbound,
+      inbound_units_30d: sum("receive"),
+      movements_per_day_7d: Math.round((moves7 / 7) * 10) / 10,
+      occupancy_percent: Math.round((usedBins / Math.max(allBins, 1)) * 1000) / 10,
+      active_alert_products: products.filter(
+        (p) => p.min_stock_threshold > 0 && productTotal(p.id) <= p.min_stock_threshold,
+      ).length,
+      open_orders: orders.filter((o) => o.status === "open").length,
+      active_shipments: active,
+      busiest_product_sku: busiest ? productById(busiest[0])?.sku ?? null : null,
+    });
+  }),
+
+  /* ── Faz 4: siparişler + dalga toplama ────────────────────────────────── */
+  http.get("*/api/v1/orders", ({ request }) => {
+    const status = new URL(request.url).searchParams.get("status");
+    const rows = (status ? orders.filter((o) => o.status === status) : orders)
+      .slice()
+      .reverse()
+      .map((o) => ({
+        ...o,
+        lines: o.lines.map((l) => {
+          const p = productById(l.product_id)!;
+          return { product_id: l.product_id, sku: p.sku, product_name: p.name, quantity: l.quantity };
+        }),
+      }));
+    return HttpResponse.json(rows);
+  }),
+  http.post("*/api/v1/orders", async ({ request }) => {
+    const body = (await request.json()) as {
+      warehouse_id: number;
+      customer_name: string;
+      lines: { product_id: number; quantity: number }[];
+    };
+    const id = nextOrderId();
+    const order = {
+      id,
+      code: `SIP-${String(id).padStart(4, "0")}`,
+      warehouse_id: body.warehouse_id,
+      customer_name: body.customer_name,
+      status: "open" as const,
+      created_at: new Date().toISOString(),
+      lines: body.lines,
+    };
+    orders.push(order);
+    return HttpResponse.json(
+      {
+        ...order,
+        lines: order.lines.map((l) => {
+          const p = productById(l.product_id)!;
+          return { product_id: l.product_id, sku: p.sku, product_name: p.name, quantity: l.quantity };
+        }),
+      },
+      { status: 201 },
+    );
+  }),
+  http.post("*/api/v1/orders/wave-pick", async ({ request }) => {
+    const { order_ids } = (await request.json()) as { order_ids: number[] };
+    const picked = orders.filter((o) => order_ids.includes(o.id));
+    if (picked.length !== order_ids.length) return err(422, "VALIDATION", "Sipariş(ler) bulunamadı.");
+    const whIds = new Set(picked.map((o) => o.warehouse_id));
+    if (whIds.size !== 1) return err(422, "VALIDATION", "Dalga toplama tek depoda yapılır.");
+    const warehouseId = [...whIds][0];
+    const totals = new Map<number, number>();
+    for (const o of picked) {
+      for (const l of o.lines) totals.set(l.product_id, (totals.get(l.product_id) ?? 0) + l.quantity);
+    }
+    const bins = binsByWarehouse.get(warehouseId) ?? [];
+    const lines = [];
+    const pickBinIds: number[] = [];
+    for (const [pid, qty] of [...totals.entries()].sort((a, b) => a[0] - b[0])) {
+      const p = productById(pid)!;
+      let bestBin: number | null = null;
+      let bestQty = 0;
+      let bestCode: string | null = null;
+      for (const b of bins) {
+        const q = stock.get(`${pid}:${b.id}`) ?? 0;
+        if (q > bestQty) {
+          bestQty = q;
+          bestBin = b.id;
+          bestCode = b.code;
+        }
+      }
+      lines.push({
+        product_id: pid, sku: p.sku, product_name: p.name,
+        total_quantity: qty, location_id: bestBin, location_code: bestCode,
+      });
+      if (bestBin) pickBinIds.push(bestBin);
+    }
+    const routeResult = pickBinIds.length >= 2 ? solvePickRoute(warehouseId, pickBinIds) : null;
+    const route = routeResult && !("error" in routeResult) ? routeResult : null;
+    picked.forEach((o) => {
+      o.status = "waved";
+    });
+    return HttpResponse.json({ order_ids, warehouse_id: warehouseId, lines, route });
+  }),
+  http.post("*/api/v1/orders/:id/picked", ({ params }) => {
+    const order = orders.find((o) => o.id === Number(params.id));
+    if (!order) return err(404, "NOT_FOUND", "Sipariş bulunamadı");
+    order.status = "picked";
+    return HttpResponse.json({
+      ...order,
+      lines: order.lines.map((l) => {
+        const p = productById(l.product_id)!;
+        return { product_id: l.product_id, sku: p.sku, product_name: p.name, quantity: l.quantity };
+      }),
     });
   }),
 

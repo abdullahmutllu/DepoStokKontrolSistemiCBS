@@ -458,3 +458,78 @@ let productIdSeq = products.length;
 export const nextProductId = () => ++productIdSeq;
 let notifIdSeq = notifications.length;
 export const nextNotificationId = () => ++notifIdSeq;
+
+/* ── Faz 4: sevkiyatlar + siparişler (değiştirilebilir demo state) ───────── */
+
+export interface DemoShipment {
+  id: number;
+  warehouse_id: number;
+  vehicle_name: string;
+  stops: { customer_id: number; name: string; lat: number; lng: number; demand: number; service_min: number }[];
+  depot: LatLng;
+  base_speed_kmh: number;
+  time_scale: number;
+  total_km: number;
+  total_min: number;
+  depart_at_ms: number;
+}
+
+export const shipments: DemoShipment[] = [];
+let shipmentIdSeq = 0;
+export const nextShipmentId = () => ++shipmentIdSeq;
+
+export interface DemoOrderLine {
+  product_id: number;
+  quantity: number;
+}
+export interface DemoOrder {
+  id: number;
+  code: string;
+  warehouse_id: number;
+  customer_name: string;
+  status: "open" | "waved" | "picked";
+  created_at: string;
+  lines: DemoOrderLine[];
+}
+
+export const orders: DemoOrder[] = [];
+let orderIdSeq = 0;
+export const nextOrderId = () => ++orderIdSeq;
+
+// Demo siparişleri (ilk depoda, dalga toplama için)
+{
+  const wh = warehouses[0];
+  const specs: [string, [number, number][]][] = [
+    ["Aslan Market", [[0, 12], [2, 4]]],
+    ["Yıldız İnşaat", [[1, 8], [3, 2], [5, 6]]],
+    ["Kaya Otomotiv", [[2, 10], [4, 3]]],
+    ["Demir Tarım", [[0, 5], [5, 9]]],
+  ];
+  for (const [name, lines] of specs) {
+    const id = nextOrderId();
+    orders.push({
+      id,
+      code: `SIP-${String(id).padStart(4, "0")}`,
+      warehouse_id: wh.id,
+      customer_name: name,
+      status: "open",
+      created_at: "2026-03-01T09:00:00Z",
+      lines: lines.map(([idx, qty]) => ({ product_id: products[idx].id, quantity: qty })),
+    });
+  }
+}
+
+/** Ürünün son 30 gününün günlük çıkış (pick) serisi — tahmin için. */
+export function dailyOutflow(productId: number): number[] {
+  const days = 30;
+  const now = Date.now();
+  const buckets = new Array<number>(days).fill(0);
+  for (const m of movements) {
+    if (m.product_id !== productId || m.type !== "pick") continue;
+    const age = Math.floor((now - new Date(m.created_at).getTime()) / 86_400_000);
+    if (age >= 0 && age < days) buckets[days - 1 - age] += m.quantity;
+  }
+  return buckets;
+}
+
+export const productById = (id: number) => products.find((p) => p.id === id);
