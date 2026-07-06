@@ -125,6 +125,10 @@ istekte deterministik hesaplanır. Backend bunu **WebSocket** ile 2 saniyede bir
 (SignalR muadili, JWT'li); soket kurulamazsa istemci **REST polling'e** düşer. Aynı motor
 tarayıcı-içi demoda TypeScript olarak koşar — canlı demo sunucusuz da araçları hareket ettirir.
 
+Demoda haritada **hep 3 araç hazır** gelir (her depodan biri, döngüsel): seed'lenmiş bu
+sevkiyatlar plan bitince başa sarar, böylece hangi sekmede olursanız olun kamyonlar sürekli
+Türkiye üzerinde yol alır — tek tık gerektirmeden.
+
 ![Canlı araç takibi demosu](docs/media/demo-tracking.gif)
 
 ![Canlı filo — harita üzerinde araçlar](docs/media/live-tracking.png)
@@ -137,7 +141,7 @@ değişir kartta belirir (% fark, yeniden atanan müşteri sayısı, kapsama dı
 Kapalı depolar haritada soluklaşıp üstü çizilir. Ağ tasarımı araçlarının (anyLogistix,
 Coupa) çekirdek sorusu.
 
-![What-if senaryosu](docs/media/scenario.png)
+![What-if senaryosu demosu](docs/media/demo-scenario.gif)
 
 ### 📈 Talep Tahmini + Yeniden Sipariş
 
@@ -147,7 +151,7 @@ eğrisi; ortalama talep, standart sapma ve güvenlik stoklu **yeniden sipariş n
 miktarı. Genel Bakış'a operasyonun nabzını tutan **KPI şeridi** (stok devir hızı, giriş/çıkış,
 hareket/gün, açık sipariş, aktif sevkiyat) eklendi.
 
-![Talep tahmini + reorder](docs/media/forecast.png)
+![Talep tahmini + reorder demosu](docs/media/demo-forecast.gif)
 
 ### 📥 Sipariş + Dalga Toplama · Barkod
 
@@ -156,7 +160,7 @@ bazında toplanır, gözlere çözülür ve mevcut rota çözücüyle optimize e
 toplama listesi** olarak çıkar. Stok işlemlerinde **kamerayla barkod okuma** (tarayıcı
 yerlisi BarcodeDetector API) ile SKU'yu okutup ürün seçin.
 
-![Sipariş + dalga toplama](docs/media/orders-wave.png)
+![Sipariş + dalga toplama demosu](docs/media/demo-orders.gif)
 
 ### 📦 Stok Operasyonları + Tam Denetim İzi
 
